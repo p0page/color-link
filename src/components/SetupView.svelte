@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { getMinRequiredColorCount, sanitizeBlueprint } from '../lib/storage';
+  import { sanitizeBlueprint } from '../lib/storage';
   import type { BoardBlueprint, GameConfig, SavedBoard } from '../lib/types';
   import BoardPreview from './BoardPreview.svelte';
   import BrandTitle from './BrandTitle.svelte';
@@ -35,7 +35,6 @@
 
   let minPathLength = $state(seed.minPathLength);
   let targetWins = $state(seed.targetWins);
-  let colorCount = $state(seed.colorCount);
   let moveUnlimited = $state(seed.moveTimeLimitSec === null);
   let moveSeconds = $state(seed.moveTimeLimitSec ?? 90);
   let verifyUnlimited = $state(seed.verifyTimeLimitSec === null);
@@ -50,8 +49,6 @@
   const blockedCount = $derived(activeBlueprint.blockedCells.length);
   const presetCount = $derived(activeBlueprint.presetPieces.length);
   const isCustomBoard = $derived(blockedCount > 0 || presetCount > 0);
-  const minRequiredColors = $derived(getMinRequiredColorCount(activeBlueprint));
-  const effectiveColorCount = $derived(Math.max(minRequiredColors, colorCount));
   const playableCells = $derived(Math.max(2, rows * cols - blockedCount));
   const maxPossiblePath = $derived(playableCells);
   const safeMinPath = $derived(Math.min(Math.max(2, minPathLength ?? 6), maxPossiblePath));
@@ -67,12 +64,7 @@
   }
 
   function handleSelectSaved(board: SavedBoard) {
-    const clean = sanitizeBlueprint(board.blueprint);
-    const needed = getMinRequiredColorCount(clean);
-    if (colorCount < needed) {
-      colorCount = needed;
-    }
-    onUpdateBlueprint(clean, board.name, board.id);
+    onUpdateBlueprint(sanitizeBlueprint(board.blueprint), board.name, board.id);
   }
 
   function handleResetBlank() {
@@ -92,10 +84,6 @@
       Math.max(2, Math.floor(minPathLength) || 6),
     );
     const clampedTargetWins = Math.min(20, Math.max(1, Math.floor(targetWins) || 3));
-    const clampedColorCount = Math.min(
-      26,
-      Math.max(minRequiredColors, Math.floor(colorCount) || 26),
-    );
     const clampedMoveSec = moveUnlimited
       ? null
       : Math.min(3600, Math.max(5, Math.floor(moveSeconds) || 90));
@@ -108,7 +96,6 @@
       cols: clampedCols,
       minPathLength: clampedMinPath,
       targetWins: clampedTargetWins,
-      colorCount: clampedColorCount,
       moveTimeLimitSec: clampedMoveSec,
       verifyTimeLimitSec: clampedVerifySec,
       playerNames: [player1Name.trim() || '玩家 1', player2Name.trim() || '玩家 2'],
@@ -212,7 +199,7 @@
 
       <section class="field-group">
         <h2>比赛规则</h2>
-        <div class="rule-fields">
+        <div class="paired-fields">
           <label class="sub-field">
             <span class="field-label">最小连接格数</span>
             <input type="number" min="2" max={maxPossiblePath} bind:value={minPathLength} />
@@ -223,20 +210,18 @@
             <input type="number" min="1" max="20" bind:value={targetWins} />
             <span class="meta-hint">先达到该分数者获胜</span>
           </label>
-          <label class="sub-field">
-            <span class="field-label">棋子颜色（A–{String.fromCharCode(64 + Math.min(26, effectiveColorCount || 26))}）</span>
-            <input type="number" min={minRequiredColors} max="26" bind:value={colorCount} />
-            {#if minRequiredColors > 2}
-              <span class="meta-hint">当前布局至少需 {minRequiredColors} 色</span>
-            {/if}
-          </label>
         </div>
-        <div class="sub-field">
-          <span class="field-label">对阵玩家</span>
-          <div class="players-row">
-            <input type="text" maxlength="16" aria-label="玩家 1 名称" placeholder="玩家 1" bind:value={player1Name} class="p0-input" />
-            <span class="vs" aria-hidden="true">VS</span>
-            <input type="text" maxlength="16" aria-label="玩家 2 名称" placeholder="玩家 2" bind:value={player2Name} class="p1-input" />
+        <div class="player-settings" role="group" aria-labelledby="player-settings-title">
+          <h3 id="player-settings-title">对阵玩家</h3>
+          <div class="paired-fields">
+            <label class="sub-field">
+              <span class="player-label"><span class="player-dot orange"></span>橙方名称</span>
+              <input type="text" maxlength="16" placeholder="玩家 1" bind:value={player1Name} />
+            </label>
+            <label class="sub-field">
+              <span class="player-label"><span class="player-dot blue"></span>蓝方名称</span>
+              <input type="text" maxlength="16" placeholder="玩家 2" bind:value={player2Name} />
+            </label>
           </div>
         </div>
       </section>
@@ -390,7 +375,7 @@
     font-weight: 700;
   }
 
-  .rule-fields {
+  .paired-fields {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
@@ -509,24 +494,39 @@
     color: #ffffff;
   }
 
-  .players-row {
+  .player-settings {
+    display: grid;
+    gap: 10px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .player-settings h3 {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 650;
+  }
+
+  .player-label {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
   }
 
-  .p0-input {
-    box-shadow: inset 3px 0 0 var(--accent-p0);
+  .player-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
   }
 
-  .p1-input {
-    box-shadow: inset 3px 0 0 var(--accent-p1);
+  .player-dot.orange {
+    background: var(--accent-p0);
   }
 
-  .vs {
-    font-size: 0.75rem;
-    font-weight: 800;
-    color: var(--text-muted);
+  .player-dot.blue {
+    background: var(--accent-p1);
   }
 
   .meta-hint {

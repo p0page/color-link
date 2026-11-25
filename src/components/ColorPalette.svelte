@@ -2,7 +2,6 @@
   import { PIECE_COLORS } from '../lib/colors';
 
   interface Props {
-    colorCount: number;
     colorCounts: Map<number, number>;
     pendingColorIds: Set<number>;
     selectedColorId: number | null;
@@ -12,7 +11,6 @@
   }
 
   let {
-    colorCount,
     colorCounts,
     pendingColorIds,
     selectedColorId,
@@ -20,18 +18,16 @@
     onSelectColor,
     onHoverColor,
   }: Props = $props();
-
-  const visibleColors = $derived(PIECE_COLORS.slice(0, colorCount));
 </script>
 
 <div class="palette-wrap">
   <div class="palette-header">
-    <span class="palette-title">棋子颜色（A–{visibleColors[visibleColors.length - 1]?.letter ?? 'Z'}）</span>
+    <span class="palette-title">棋子颜色（A–Z）</span>
     <span class="palette-legend">数字 = 剩余可放枚数</span>
   </div>
 
   <div class="palette-grid">
-    {#each visibleColors as color (color.id)}
+    {#each PIECE_COLORS as color (color.id)}
       {@const placed = colorCounts.get(color.id) ?? 0}
       {@const remaining = Math.max(0, 2 - placed)}
       {@const usedThisTurn = pendingColorIds.has(color.id)}

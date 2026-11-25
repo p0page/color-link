@@ -1,3 +1,4 @@
+import { PIECE_COLORS } from './colors';
 import { coordKey, isInBounds } from './engine';
 import type { BoardBlueprint, CellKey, Coord, MatchHistoryRecord, PresetPiece, SavedBoard } from './types';
 
@@ -49,7 +50,7 @@ export function sanitizeBlueprint(blueprint: BoardBlueprint): BoardBlueprint {
   for (const item of blueprint.presetPieces ?? []) {
     const coord = { row: Math.floor(item.coord.row), col: Math.floor(item.coord.col) };
     const colorId = Math.floor(item.colorId);
-    if (!isInBounds(coord, rows, cols) || colorId < 0 || colorId >= 26) {
+    if (!isInBounds(coord, rows, cols) || colorId < 0 || colorId >= PIECE_COLORS.length) {
       continue;
     }
     const key = coordKey(coord);
@@ -71,16 +72,6 @@ export function sanitizeBlueprint(blueprint: BoardBlueprint): BoardBlueprint {
     blockedCells,
     presetPieces,
   };
-}
-
-export function getMinRequiredColorCount(blueprint: BoardBlueprint): number {
-  let maxId = -1;
-  for (const piece of blueprint.presetPieces) {
-    if (piece.colorId > maxId) {
-      maxId = piece.colorId;
-    }
-  }
-  return Math.max(2, maxId + 1);
 }
 
 export function loadSavedBoards(): SavedBoard[] {

@@ -8,7 +8,7 @@
   import RoundResultModal from './components/RoundResultModal.svelte';
   import SetupView from './components/SetupView.svelte';
   import VerifyPanel from './components/VerifyPanel.svelte';
-  import { getPieceColor } from './lib/colors';
+  import { getPieceColor, PIECE_COLORS } from './lib/colors';
   import {
     canCompleteCurrentTurn,
     canConfirmTurn,
@@ -196,7 +196,7 @@
         rows: game.blueprint.rows,
         cols: game.blueprint.cols,
         minPathLength: game.config.minPathLength,
-        colorCount: game.config.colorCount,
+        colorCount: PIECE_COLORS.length,
         blockedCount: game.blueprint.blockedCells.length,
         presetCount: game.blueprint.presetPieces.length,
         rounds: game.history.map((item) => ({ ...item })),
@@ -777,7 +777,6 @@
             </div>
 
             <ColorPalette
-              colorCount={game.config.colorCount}
               {colorCounts}
               {pendingColorIds}
               {selectedColorId}

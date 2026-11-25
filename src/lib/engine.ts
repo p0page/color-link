@@ -1,3 +1,4 @@
+import { PIECE_COLORS } from './colors';
 import type {
   BoardBlueprint,
   CellKey,
@@ -16,7 +17,6 @@ export const DEFAULT_CONFIG: GameConfig = {
   cols: 10,
   minPathLength: 6,
   targetWins: 3,
-  colorCount: 26,
   moveTimeLimitSec: 90,
   verifyTimeLimitSec: 300,
   playerNames: ['玩家 1', '玩家 2'],
@@ -191,7 +191,7 @@ export function getAvailableColorIdsForTurn(state: GameState): number[] {
   const counts = getColorCounts(state.pieces);
   const pendingColors = getPendingColorIds(state);
   const available: number[] = [];
-  for (let colorId = 0; colorId < state.config.colorCount; colorId += 1) {
+  for (const { id: colorId } of PIECE_COLORS) {
     const count = counts.get(colorId) ?? 0;
     if (count < 2 && !pendingColors.has(colorId)) {
       available.push(colorId);
@@ -224,7 +224,7 @@ export function canPlaceTurnPiece(
   if (!isInBounds(coord, state.blueprint.rows, state.blueprint.cols)) {
     return { ok: false, reason: '超出棋盘范围' };
   }
-  if (colorId < 0 || colorId >= state.config.colorCount) {
+  if (!Number.isInteger(colorId) || colorId < 0 || colorId >= PIECE_COLORS.length) {
     return { ok: false, reason: '无效颜色' };
   }
   const required = requiredPlacementsForTurn(state.turnIndex);

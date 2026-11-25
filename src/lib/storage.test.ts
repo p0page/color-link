@@ -4,7 +4,6 @@ import {
   clearMatchHistory,
   deleteMatchHistoryItem,
   deleteSavedBoard,
-  getMinRequiredColorCount,
   loadMatchHistory,
   loadSavedBoards,
   sanitizeBlueprint,
@@ -60,7 +59,8 @@ describe('storage & blueprint sanitization', () => {
         { coord: { row: 0, col: 0 }, colorId: 0 },
         { coord: { row: 0, col: 1 }, colorId: 0 },
         { coord: { row: 0, col: 2 }, colorId: 0 }, // 3rd piece of color A -> dropped
-        { coord: { row: 2, col: 2 }, colorId: 15 }, // color P -> kept
+        { coord: { row: 2, col: 2 }, colorId: 25 },
+        { coord: { row: 2, col: 3 }, colorId: 26 },
       ],
     });
 
@@ -68,9 +68,8 @@ describe('storage & blueprint sanitization', () => {
     expect(clean.presetPieces).toEqual([
       { coord: { row: 0, col: 0 }, colorId: 0 },
       { coord: { row: 0, col: 1 }, colorId: 0 },
-      { coord: { row: 2, col: 2 }, colorId: 15 },
+      { coord: { row: 2, col: 2 }, colorId: 25 },
     ]);
-    expect(getMinRequiredColorCount(clean)).toBe(16);
   });
 
   it('persists, updates, and deletes saved boards in localStorage', () => {

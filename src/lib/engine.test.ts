@@ -35,6 +35,7 @@ describe('Color Link engine', () => {
     expect(state.phase).toBe('playing');
     expect(state.currentPlayer).toBe(1);
     expect(canDeclareImpossibility(state)).toBe(false);
+    expect(canPlaceTurnPiece(state, { row: 0, col: 0 }, 26).ok).toBe(false);
 
     // First player places arbitrary letter (e.g. Z = 25)
     state = placeTurnPiece(state, { row: 0, col: 0 }, 25);

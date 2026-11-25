@@ -34,7 +34,6 @@ export interface GameConfig {
   cols: number;
   minPathLength: number;
   targetWins: number;
-  colorCount: number;
   moveTimeLimitSec: number | null;
   verifyTimeLimitSec: number | null;
   playerNames: [string, string];
