@@ -5,6 +5,7 @@
   import { generateId, sanitizeBlueprint } from '../lib/storage';
   import type { BoardBlueprint, CellKey, SavedBoard } from '../lib/types';
   import BoardPreview from './BoardPreview.svelte';
+  import BoardViewport from './BoardViewport.svelte';
 
   interface Props {
     initialBlueprint: BoardBlueprint;
@@ -60,6 +61,7 @@
   let tool = $state<'block' | 'piece' | 'erase'>('block');
   let selectedColorId = $state(0);
   let dragAction = $state<'block' | 'unblock' | 'erase' | null>(null);
+  let paintedOnPointerDown = false;
   let notice = $state<string | null>(null);
   let noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -151,22 +153,16 @@
     }
   }
 
-  function handleCellMouseDown(event: MouseEvent, row: number, col: number) {
-    if (event.button !== 0) {
-      return;
-    }
-    event.preventDefault();
-    const key = cellKey(row, col);
-
+  function editCell(key: CellKey, allowDrag = false) {
     if (tool === 'block') {
       const shouldBlock = !blockedMap[key];
-      dragAction = shouldBlock ? 'block' : 'unblock';
+      if (allowDrag) dragAction = shouldBlock ? 'block' : 'unblock';
       setCellBlocked(key, shouldBlock);
       return;
     }
 
     if (tool === 'erase') {
-      dragAction = 'erase';
+      if (allowDrag) dragAction = 'erase';
       eraseCell(key);
       return;
     }
@@ -198,11 +194,25 @@
     };
   }
 
-  function handleCellMouseEnter(row: number, col: number) {
-    if (!dragAction) {
+  function handleCellPointerDown(event: PointerEvent, key: CellKey) {
+    paintedOnPointerDown = event.pointerType === 'mouse' && event.button === 0;
+    if (paintedOnPointerDown) {
+      event.preventDefault();
+      editCell(key, true);
+    }
+  }
+
+  function handleCellClick(event: MouseEvent, key: CellKey) {
+    if (event.detail === 0 || !paintedOnPointerDown) {
+      editCell(key);
+    }
+    paintedOnPointerDown = false;
+  }
+
+  function handleCellPointerEnter(event: PointerEvent, key: CellKey) {
+    if (event.pointerType !== 'mouse' || !(event.buttons & 1) || !dragAction) {
       return;
     }
-    const key = cellKey(row, col);
     if (dragAction === 'block') {
       setCellBlocked(key, true);
     } else if (dragAction === 'unblock') {
@@ -217,7 +227,7 @@
     eraseCell(cellKey(row, col));
   }
 
-  function handleWindowMouseUp() {
+  function stopPainting() {
     dragAction = null;
   }
 
@@ -278,7 +288,7 @@
   }
 </script>
 
-<svelte:window onmouseup={handleWindowMouseUp} />
+<svelte:window onpointerup={stopPainting} onpointercancel={stopPainting} onblur={stopPainting} />
 
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-label="棋盘编辑器">
   <div class="editor-shell">
@@ -303,6 +313,7 @@
               type="button"
               class="tool-btn"
               class:active={tool === 'block'}
+              aria-pressed={tool === 'block'}
               onclick={() => (tool = 'block')}
             >
               <span class="swatch-black"></span>
@@ -312,6 +323,7 @@
               type="button"
               class="tool-btn"
               class:active={tool === 'piece'}
+              aria-pressed={tool === 'piece'}
               onclick={() => (tool = 'piece')}
             >
               <span
@@ -326,6 +338,7 @@
               type="button"
               class="tool-btn"
               class:active={tool === 'erase'}
+              aria-pressed={tool === 'erase'}
               onclick={() => (tool = 'erase')}
             >
               橡皮擦
@@ -360,6 +373,32 @@
           </div>
         </div>
 
+        {#if tool === 'piece'}
+          <div class="panel-card">
+            <div class="panel-title">选择预设棋子颜色（A–Z）</div>
+            <div class="mini-palette">
+              {#each PIECE_COLORS as color (color.id)}
+                {@const placed = colorCounts.get(color.id) ?? 0}
+                <button
+                  type="button"
+                  class="pal-item"
+                  class:selected={selectedColorId === color.id}
+                  class:full={placed >= 2}
+                  aria-pressed={selectedColorId === color.id}
+                  onclick={() => (selectedColorId = color.id)}
+                  title="{color.letter}：已预设 {placed}/2 枚"
+                >
+                  <span class="pal-dot" style="background: {color.hex}; color: {color.textColor};">
+                    {color.letter}
+                  </span>
+                  <span class="pal-count tabular">{placed}/2</span>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <BoardViewport {rows} {cols}>
         <div class="editor-board-wrap">
           <div class="col-headers" style="grid-template-columns: 22px repeat({cols}, minmax(0, 1fr));">
             <div></div>
@@ -375,9 +414,10 @@
               {/each}
             </div>
 
+            <div class="editor-stage" style="aspect-ratio: {cols} / {rows};">
             <div
               class="editor-grid"
-              style="aspect-ratio: {cols} / {rows}; grid-template-columns: repeat({cols}, minmax(0, 1fr)); grid-template-rows: repeat({rows}, minmax(0, 1fr));"
+              style="grid-template-columns: repeat({cols}, minmax(0, 1fr)); grid-template-rows: repeat({rows}, minmax(0, 1fr));"
             >
               {#each rowIndices as row (row)}
                 {#each colIndices as col (col)}
@@ -389,8 +429,9 @@
                     class="e-cell"
                     class:blocked={isBlocked}
                     aria-label="第 {row + 1} 行第 {col + 1} 列"
-                    onmousedown={(e) => handleCellMouseDown(e, row, col)}
-                    onmouseenter={() => handleCellMouseEnter(row, col)}
+                    onpointerdown={(event) => handleCellPointerDown(event, key)}
+                    onpointerenter={(event) => handleCellPointerEnter(event, key)}
+                    onclick={(event) => handleCellClick(event, key)}
                     oncontextmenu={(e) => handleCellContextMenu(e, row, col)}
                   >
                     {#if pieceColorId !== undefined}
@@ -406,8 +447,10 @@
                 {/each}
               {/each}
             </div>
+            </div>
           </div>
         </div>
+        </BoardViewport>
 
         <div class="canvas-footer">
           <div class="stats tabular">
@@ -425,11 +468,11 @@
 
         <div class="tip-line">
           {#if tool === 'block'}
-            提示：点击或按住鼠标拖动可批量绘制/取消黑色障碍块；右键任意格可直接擦除。
+            轻点格子添加或移除黑块。<span class="mouse-tip">也可按住鼠标拖动批量编辑。</span>
           {:else if tool === 'piece'}
-            提示：在右侧选择字母颜色后点击空格放置预设棋子（每种颜色最多 2 枚）；再次点击同色棋子或右键可移除。
+            选好颜色后点击格子放置棋子。再次点击同色棋子可移除。
           {:else}
-            提示：点击或拖动可擦除黑块障碍或预设棋子。
+            轻点格子擦除障碍或棋子。<span class="mouse-tip">也可按住鼠标拖动批量擦除。</span>
           {/if}
         </div>
 
@@ -439,31 +482,6 @@
       </section>
 
       <aside class="side-pane">
-        <div class="panel-card">
-          <div class="panel-title">选择预设棋子颜色（A–Z）</div>
-          <div class="mini-palette">
-            {#each PIECE_COLORS as color (color.id)}
-              {@const placed = colorCounts.get(color.id) ?? 0}
-              <button
-                type="button"
-                class="pal-item"
-                class:selected={tool === 'piece' && selectedColorId === color.id}
-                class:full={placed >= 2}
-                onclick={() => {
-                  selectedColorId = color.id;
-                  tool = 'piece';
-                }}
-                title="{color.letter}：已预设 {placed}/2 枚"
-              >
-                <span class="pal-dot" style="background: {color.hex}; color: {color.textColor};">
-                  {color.letter}
-                </span>
-                <span class="pal-count tabular">{placed}/2</span>
-              </button>
-            {/each}
-          </div>
-        </div>
-
         <div class="panel-card">
           <div class="panel-title">保存棋盘到本地</div>
           <input
@@ -735,8 +753,15 @@
     color: var(--text-muted);
   }
 
+  .editor-stage {
+    position: relative;
+    align-self: start;
+    min-width: 0;
+  }
+
   .editor-grid {
-    width: 100%;
+    position: absolute;
+    inset: 0;
     display: grid;
     background: #ffffff;
     border: 1.5px solid var(--border-strong);
@@ -757,6 +782,7 @@
     justify-content: center;
     background: transparent;
     transition: background-color 0.08s ease;
+    touch-action: manipulation;
   }
 
   .e-cell:hover {
@@ -818,6 +844,7 @@
 
   .clear-btns {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
   }
 
@@ -885,7 +912,7 @@
 
   .mini-palette {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(13, minmax(0, 1fr));
     gap: 5px;
   }
 
@@ -1021,6 +1048,65 @@
   @media (max-width: 920px) {
     .editor-body {
       grid-template-columns: 1fr;
+    }
+  }
+
+  @media (hover: none) {
+    .mouse-tip {
+      display: none;
+    }
+  }
+
+  @media (max-width: 680px), (hover: none) and (pointer: coarse) and (max-width: 960px) {
+    .editor-board-wrap {
+      max-width: none;
+    }
+  }
+
+  @media (max-width: 680px) {
+    .modal-backdrop {
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    .editor-shell {
+      height: 100%;
+      max-height: 100%;
+      border-radius: 0;
+    }
+
+    .editor-header,
+    .editor-body {
+      padding: 10px 12px;
+    }
+
+    .editor-header {
+      flex-shrink: 0;
+    }
+
+    .editor-body {
+      min-height: 0;
+      grid-template-columns: minmax(0, 1fr);
+      overscroll-behavior: contain;
+    }
+
+    .mini-palette {
+      grid-template: repeat(2, auto) / none;
+      grid-auto-flow: column;
+      grid-auto-columns: 44px;
+      overflow-x: auto;
+      padding: 3px 3px 7px;
+    }
+
+    .tool-btn,
+    .pal-item,
+    .header-actions .btn,
+    .mini-btn {
+      min-height: 40px;
+    }
+
+    .dim-field input,
+    .name-input {
+      font-size: 16px;
     }
   }
 </style>

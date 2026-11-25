@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BoardViewport from './BoardViewport.svelte';
   import { getPieceColor } from '../lib/colors';
   import {
     canPlaceTurnPiece,
@@ -195,6 +196,7 @@
   }
 </script>
 
+<BoardViewport {rows} {cols}>
 <div class="board-shell">
   <div class="col-headers" style="grid-template-columns: 24px repeat({cols}, minmax(0, 1fr));">
     <div></div>
@@ -216,7 +218,7 @@
       style="aspect-ratio: {cols} / {rows}; --active-hex: {activeColorHex};"
       role="region"
       aria-label="Color Link 棋盘"
-      onmouseleave={() => (hoveredCoord = null)}
+      onpointerleave={() => (hoveredCoord = null)}
     >
       <div
         class="cells-grid"
@@ -251,7 +253,7 @@
               class:erasable-hover={isErasableHover}
               disabled={isBlocked}
               aria-label="第 {row + 1} 行第 {col + 1} 列"
-              onmouseenter={() => (hoveredCoord = coord)}
+              onpointerenter={(event) => (hoveredCoord = event.pointerType === 'mouse' ? coord : null)}
               onclick={() => handleCellClick(coord)}
               oncontextmenu={(event) => handleContextMenu(event, coord)}
             >
@@ -403,6 +405,7 @@
     </div>
   </div>
 </div>
+</BoardViewport>
 
 <style>
   .board-shell {
@@ -440,6 +443,7 @@
   .grid-stage {
     position: relative;
     width: 100%;
+    align-self: start;
     background: #ffffff;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
@@ -451,10 +455,9 @@
   }
 
   .cells-grid {
-    position: relative;
+    position: absolute;
+    inset: 0;
     z-index: 2;
-    width: 100%;
-    height: 100%;
     display: grid;
   }
 
@@ -483,6 +486,7 @@
     justify-content: center;
     background: transparent;
     transition: background-color 0.1s ease;
+    touch-action: manipulation;
   }
 
   .cell:hover:not(:disabled) {
@@ -619,5 +623,11 @@
     color: var(--text-primary);
     box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
     pointer-events: none;
+  }
+
+  @media (max-width: 680px), (hover: none) and (pointer: coarse) and (max-width: 960px) {
+    .board-shell {
+      max-width: none;
+    }
   }
 </style>

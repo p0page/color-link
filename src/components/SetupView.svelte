@@ -641,8 +641,25 @@
   }
 
   @media (max-width: 720px) {
+    .setup-page {
+      padding-inline: max(14px, env(safe-area-inset-left)) max(14px, env(safe-area-inset-right));
+      padding-bottom: max(24px, env(safe-area-inset-bottom));
+    }
+
     .form-grid {
       grid-template-columns: 1fr;
+    }
+
+    input[type='number'],
+    input[type='text'] {
+      font-size: 16px;
+      min-height: 44px;
+    }
+
+    .chip,
+    .editor-btn,
+    .reset-link {
+      min-height: 36px;
     }
 
     .setup-footer {

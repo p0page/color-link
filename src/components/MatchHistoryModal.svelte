@@ -199,7 +199,7 @@
   .modal-card {
     width: 100%;
     max-width: 720px;
-    max-height: 86vh;
+    max-height: 86dvh;
     display: flex;
     flex-direction: column;
     background: var(--bg-surface);
@@ -236,6 +236,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
   }
 
   .btn.small {
@@ -248,6 +249,8 @@
     overflow-y: auto;
     background: var(--bg-base);
     flex: 1;
+    min-height: 0;
+    overscroll-behavior: contain;
   }
 
   .empty-state {
@@ -468,5 +471,20 @@
 
   .r-reason {
     color: var(--text-muted);
+  }
+
+  @media (max-width: 680px) {
+    .modal-header,
+    .records-body {
+      padding: 12px;
+    }
+
+    .header-actions .btn {
+      min-height: 40px;
+    }
+
+    .round-line {
+      flex-wrap: wrap;
+    }
   }
 </style>

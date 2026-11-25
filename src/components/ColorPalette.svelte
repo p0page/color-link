@@ -24,6 +24,7 @@
   <div class="palette-header">
     <span class="palette-title">棋子颜色（A–Z）</span>
     <span class="palette-legend">数字 = 剩余可放枚数</span>
+    <span class="palette-scroll-hint">左右滑动选子</span>
   </div>
 
   <div class="palette-grid">
@@ -45,8 +46,10 @@
         {disabled}
         title="{color.letter}：棋盘已有 {placed}/2 枚{usedThisTurn ? '（本回合已使用）' : ''}"
         onclick={() => onSelectColor(color.id)}
-        onmouseenter={() => onHoverColor(color.id)}
-        onmouseleave={() => onHoverColor(null)}
+        onpointerenter={(event) => {
+          if (event.pointerType === 'mouse') onHoverColor(color.id);
+        }}
+        onpointerleave={() => onHoverColor(null)}
       >
         <span class="letter">{color.letter}</span>
         <span class="badge">{usedThisTurn ? '本轮' : remaining}</span>
@@ -78,6 +81,10 @@
   .palette-legend {
     font-size: 0.74rem;
     color: var(--text-muted);
+  }
+
+  .palette-scroll-hint {
+    display: none;
   }
 
   .palette-grid {
@@ -158,9 +165,35 @@
     color: #2563eb;
   }
 
-  @media (max-width: 480px) {
+  @media (max-width: 680px) {
+    .palette-legend {
+      display: none;
+    }
+
+    .palette-scroll-hint {
+      display: inline;
+      font-size: 0.74rem;
+      color: var(--text-muted);
+    }
+
     .palette-grid {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template: repeat(2, auto) / none;
+      grid-auto-flow: column;
+      grid-auto-columns: 44px;
+      gap: 5px;
+      overflow-x: auto;
+      padding: 3px 3px 7px;
+    }
+
+    .color-chip {
+      min-height: 44px;
+      gap: 2px;
+      padding-block: 4px;
+    }
+
+    .letter {
+      width: 24px;
+      height: 24px;
     }
   }
 </style>

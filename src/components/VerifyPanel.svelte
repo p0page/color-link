@@ -57,6 +57,7 @@
       type="button"
       class="tool-btn"
       class:active={verifyTool === 'draw' && placingSingletonColorId === null}
+      aria-pressed={verifyTool === 'draw' && placingSingletonColorId === null}
       onclick={() => onSetTool('draw')}
     >
       画线
@@ -65,6 +66,7 @@
       type="button"
       class="tool-btn"
       class:active={verifyTool === 'erase' && placingSingletonColorId === null}
+      aria-pressed={verifyTool === 'erase' && placingSingletonColorId === null}
       onclick={() => onSetTool('erase')}
     >
       擦除
@@ -73,11 +75,11 @@
 
   <p class="tool-hint">
     {#if placingSingletonColorId !== null}
-      正在补放 <strong>{getPieceColor(placingSingletonColorId).letter}</strong> 的配对棋子：点击棋盘空格或该色连线末端即可放置，再点按钮或按 Esc 取消。
+      正在补放 <strong>{getPieceColor(placingSingletonColorId).letter}</strong> 的配对棋子：点击棋盘空格或连线末端放置，再点补放按钮可取消。
     {:else if verifyTool === 'erase'}
       点击任意连线格即可从该格截断擦除；点击验证期补放的棋子可将其移除。
     {:else}
-      先点击棋子或已有线格选中起点，再多次点击同行/同列高亮格即可折线延伸；点击已画路径格可回退，再次点击当前端点或按 Esc 取消选中。
+      先点击棋子或已有连线，再点击同行或同列的高亮格延伸。点击已画的格子可回退，再点当前端点可取消。
     {/if}
   </p>
 
@@ -488,5 +490,18 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  @media (max-width: 680px) {
+    .tool-btn,
+    .singleton-btn,
+    .verify-actions .btn {
+      min-height: 44px;
+    }
+
+    .mini-action {
+      min-height: 36px;
+      padding-inline: 9px;
+    }
   }
 </style>

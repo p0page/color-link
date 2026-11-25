@@ -290,7 +290,7 @@
     }
 
     if (selectedColorId === null) {
-      showToast('请先在右侧选择一个字母颜色，再点击棋盘空格落子');
+      showToast('请先选择字母棋子，再点击棋盘空格落子');
       return;
     }
 
@@ -607,7 +607,7 @@
     onStart={handleStartMatch}
   />
 {:else}
-  <div class="game-layout">
+  <div class="game-layout" class:playing={game.phase === 'playing'}>
     <header class="top-bar">
       <div class="brand-group">
         <BrandTitle size="sm" />
@@ -805,25 +805,25 @@
                 </button>
               </div>
 
-              <button
-                type="button"
-                class="btn btn-primary confirm-btn"
-                disabled={!canConfirm}
-                onclick={handleConfirmTurn}
-              >
-                确认落子并换手 ({game.pendingCoords.length}/{requiredNow})
-              </button>
-
-              <div class="divider"></div>
-
-              <button
-                type="button"
-                class="btn btn-outline-danger impossible-btn"
-                disabled={!canDeclare}
-                onclick={handleDeclareImpossibility}
-              >
-                认定不可能
-              </button>
+              <div class="round-actions">
+                <button
+                  type="button"
+                  class="btn btn-primary confirm-btn"
+                  disabled={!canConfirm}
+                  onclick={handleConfirmTurn}
+                >
+                  确认落子 <span class="tabular">({game.pendingCoords.length}/{requiredNow})</span>
+                </button>
+                <div class="divider"></div>
+                <button
+                  type="button"
+                  class="btn btn-outline-danger impossible-btn"
+                  disabled={!canDeclare}
+                  onclick={handleDeclareImpossibility}
+                >
+                  认定不可能
+                </button>
+              </div>
               <span class="impossible-note">
                 {#if canDeclare && game.lastMover !== null}
                   点击后将由上一手落子方 <strong>{game.config.playerNames[game.lastMover]}</strong> 进行连线证明
@@ -894,6 +894,11 @@
     margin: 0 auto;
     padding: clamp(16px, 3vw, 32px) clamp(12px, 3vw, 30px) 32px;
     gap: 20px;
+  }
+
+  .round-actions {
+    display: grid;
+    gap: 9px;
   }
 
   .top-bar {
@@ -1186,6 +1191,7 @@
   }
 
   .side-panel {
+    min-width: 0;
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
@@ -1284,20 +1290,105 @@
 
   @media (max-width: 960px) {
     .workspace {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (min-width: 681px) and (max-width: 960px) and (orientation: landscape) and (pointer: coarse) {
+    .workspace {
+      grid-template-columns: minmax(0, 1fr) minmax(230px, 0.72fr);
+    }
+
+    .game-layout {
+      padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
     }
   }
 
   @media (max-width: 680px) {
+    .game-layout {
+      padding: max(12px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+      gap: 10px;
+    }
+
+    .game-layout.playing {
+      padding-bottom: calc(82px + env(safe-area-inset-bottom));
+    }
+
+    .top-bar,
+    .workspace,
+    .board-column,
+    .play-panel {
+      gap: 8px;
+    }
+
+    .top-actions .btn {
+      min-height: 40px;
+    }
+
     .match-score {
       grid-template-columns: minmax(0, 1fr);
-      gap: 6px;
+      gap: 2px;
+      padding: 8px 12px;
     }
 
     .p-num {
       min-width: 42px;
       height: 44px;
       font-size: 1.7rem;
+    }
+
+    .board-column,
+    .side-panel {
+      padding: 9px;
+    }
+
+    .operator-bar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      padding: 7px 9px;
+    }
+
+    .operator-left {
+      gap: 4px 8px;
+      overflow-wrap: anywhere;
+    }
+
+    .op-step {
+      flex-basis: 100%;
+    }
+
+    .timer-box {
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 4px 8px;
+      white-space: nowrap;
+    }
+
+    .cancel-inline,
+    .undo-row .btn {
+      min-height: 36px;
+    }
+
+    .playing .round-actions {
+      position: fixed;
+      z-index: 20;
+      inset: auto 0 0;
+      grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+      padding: 9px max(12px, env(safe-area-inset-right)) calc(9px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border-subtle);
+      box-shadow: 0 -4px 18px rgb(17 19 24 / 8%);
+    }
+
+    .round-actions .btn {
+      min-height: 44px;
+      padding-inline: 8px;
+    }
+
+    .round-actions .divider {
+      display: none;
     }
   }
 </style>
