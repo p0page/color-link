@@ -352,10 +352,6 @@
         0 0 0 3px color-mix(in srgb, var(--choice-accent) 10%, transparent);
     }
 
-    .choice-btn:hover .choice-arrow {
-      transform: translateX(1.5px);
-    }
-
     .choice-btn:hover .choice-action {
       color: var(--text-primary);
     }
@@ -413,7 +409,6 @@
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
-    transition: transform 0.15s ease;
   }
 
   .choice-body {

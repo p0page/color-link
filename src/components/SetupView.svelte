@@ -77,6 +77,23 @@
     openSlot = openSlot === index ? null : index;
   }
 
+  function expandPicker(node: HTMLElement) {
+    if (
+      typeof window === 'undefined' ||
+      window.matchMedia('(max-width: 640px), (prefers-reduced-motion: reduce)').matches
+    ) {
+      return { duration: 0 };
+    }
+    const height = node.getBoundingClientRect().height;
+    const parentGap = parseFloat(getComputedStyle(node.parentElement ?? node).rowGap) || 0;
+    return {
+      duration: 240,
+      easing: (progress: number) => 1 - (1 - progress) ** 4,
+      css: (progress: number, inverse: number) =>
+        `overflow: hidden; height: ${progress * height}px; margin-top: ${-parentGap * inverse}px; opacity: ${Math.min(1, progress * 1.6)};`,
+    };
+  }
+
   async function closePicker() {
     openSlot = null;
     await tick();
@@ -222,33 +239,35 @@
         {#if openSlot !== null}
           {@const index = openSlot}
           {@const selected = selectedBoards[index]}
-          <BoardPicker id="schedule-board-gallery" title={`选择第 ${index + 1} 局地图`} onClose={closePicker}>
-            <div class="picker-actions">
-              <button type="button" class="btn picker-create" onclick={() => openEditor(index)}>
-                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-                新建自定义地图
-              </button>
-              <button type="button" class="picker-draw" disabled={!pool.some(({ id }) => id !== selected?.id)}
-                onclick={() => drawBoardForRound(index)}>随机选一张</button>
-              {#if savedBoards.some(({ id }) => id === selected?.id)}
-                <button type="button" class="chip" onclick={() => openEditor(index, selected)}>编辑本局地图</button>
+          <div class="picker-slot" transition:expandPicker>
+            <BoardPicker id="schedule-board-gallery" title={`选择第 ${index + 1} 局地图`} onClose={closePicker}>
+              <div class="picker-actions">
+                <button type="button" class="btn picker-create" onclick={() => openEditor(index)}>
+                  <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  新建自定义地图
+                </button>
+                <button type="button" class="picker-draw" disabled={!pool.some(({ id }) => id !== selected?.id)}
+                  onclick={() => drawBoardForRound(index)}>随机选一张</button>
+                {#if savedBoards.some(({ id }) => id === selected?.id)}
+                  <button type="button" class="chip" onclick={() => openEditor(index, selected)}>编辑本局地图</button>
+                {/if}
+              </div>
+              {#if savedBoards.length > 0}
+                <h4>自定义地图</h4>
+                <BoardGallery boards={savedBoards} minimum={safeMinPath} selectedId={selected?.id}
+                  onPreview={(board) => (preview = { board, slot: index })}
+                  onSelect={(board) => chooseBoard(index, board)} />
               {/if}
-            </div>
-            {#if savedBoards.length > 0}
-              <h4>自定义地图</h4>
-              <BoardGallery boards={savedBoards} minimum={safeMinPath} selectedId={selected?.id}
-                onPreview={(board) => (preview = { board, slot: index })}
-                onSelect={(board) => chooseBoard(index, board)} />
-            {/if}
-            {#each groups as group (group.title)}
-              <h4>{group.title}</h4>
-              <BoardGallery boards={group.boards} minimum={safeMinPath} selectedId={selected?.id}
-                onPreview={(board) => (preview = { board, slot: index })}
-                onSelect={(board) => chooseBoard(index, board)} />
-            {/each}
-          </BoardPicker>
+              {#each groups as group (group.title)}
+                <h4>{group.title}</h4>
+                <BoardGallery boards={group.boards} minimum={safeMinPath} selectedId={selected?.id}
+                  onPreview={(board) => (preview = { board, slot: index })}
+                  onSelect={(board) => chooseBoard(index, board)} />
+              {/each}
+            </BoardPicker>
+          </div>
         {/if}
         {#if invalidRounds.length > 0}
           <p class="schedule-note caution" role="status">请检查第 {invalidRounds.join('、')} 局的地图和最小连线格数。</p>
@@ -481,6 +500,7 @@
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
     background: var(--bg-elevated);
+    transition: border-color 0.18s ease, background-color 0.18s ease;
   }
 
   .board-choice.choosing {
@@ -561,10 +581,22 @@
     right: 6px;
     top: calc(50% - 5px);
     pointer-events: none;
+    transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .board-picker.expanded::after {
     transform: translateY(3px) rotate(225deg);
+  }
+
+  .picker-slot {
+    min-width: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .board-choice,
+    .board-picker::after {
+      transition: none;
+    }
   }
 
   .schedule-note {

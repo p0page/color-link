@@ -15,7 +15,7 @@
   let heading = $state<HTMLHeadingElement>();
 
   $effect(() => {
-    heading?.focus();
+    heading?.focus({ preventScroll: true });
   });
 </script>
 
