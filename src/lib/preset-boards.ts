@@ -111,7 +111,7 @@ export const PRESET_BOARDS = [
       ],
     },
   ], true),
-  definePreset('classic-r5', '三门隔断', [
+  definePreset('classic-r5', '双门隔断', [
     '.........',
     '.........',
     '.........',

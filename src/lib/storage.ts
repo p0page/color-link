@@ -97,11 +97,15 @@ export function loadSavedBoards(): SavedBoard[] {
         item.blueprint &&
         typeof item.blueprint === 'object'
       ) {
+        const blueprint = sanitizeBlueprint(item.blueprint);
+        const minimum = item.supportedMinPathLength;
         boards.push({
           id: item.id,
           name: item.name.trim() || '未命名棋盘',
           updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : new Date().toISOString(),
-          blueprint: sanitizeBlueprint(item.blueprint),
+          blueprint,
+          supportedMinPathLength: Number.isInteger(minimum) && minimum >= 2
+            && minimum <= blueprint.rows * blueprint.cols - blueprint.blockedCells.length ? minimum : undefined,
         });
       }
     }

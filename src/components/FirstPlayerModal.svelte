@@ -11,25 +11,15 @@
     scores: [number, number];
     targetWins: number;
     currentRoundBoard: MatchBoard | undefined;
-    swapChoices: MatchBoard[];
-    canRandomSwap: boolean;
-    onSwapBoard: (board: MatchBoard) => void;
-    onRandomSwap: () => void;
     onSelect: (player: PlayerId) => void;
     onBackToSetup: () => void;
   }
 
   let {
-    roundNumber, playerNames, scores, targetWins, currentRoundBoard, swapChoices, canRandomSwap,
-    onSwapBoard, onRandomSwap, onSelect, onBackToSetup,
+    roundNumber, playerNames, scores, targetWins, currentRoundBoard,
+    onSelect, onBackToSetup,
   }: Props = $props();
   let previewBoard = $state.raw<MatchBoard | undefined>();
-
-  function chooseBoard(event: Event & { currentTarget: HTMLSelectElement }) {
-    const board = swapChoices.find(({ id }) => id === event.currentTarget.value);
-    if (board) onSwapBoard(board);
-    event.currentTarget.value = '';
-  }
 </script>
 
 <div class="modal-backdrop">
@@ -47,21 +37,6 @@
           <span class="board-caption">本局棋盘</span>
           <BoardInfo {board} />
         </div>
-        {#if canRandomSwap || swapChoices.length > 0}
-          <div class="board-actions">
-            {#if canRandomSwap}
-              <button type="button" class="btn btn-ghost" onclick={onRandomSwap}>随机换图</button>
-            {/if}
-            {#if swapChoices.length > 0}
-              <select aria-label="从地图库换图" onchange={chooseBoard}>
-                <option value="">从地图库换图</option>
-                {#each swapChoices as board (board.id)}
-                  <option value={board.id}>{boardOptionLabel(board)}</option>
-                {/each}
-              </select>
-            {/if}
-          </div>
-        {/if}
       </div>
     {/if}
 
@@ -96,9 +71,11 @@
       </button>
     </div>
 
-    <div class="footer-actions">
-      <button type="button" class="btn btn-ghost" onclick={onBackToSetup}>返回修改配置</button>
-    </div>
+    {#if roundNumber === 1}
+      <div class="footer-actions">
+        <button type="button" class="btn btn-ghost" onclick={onBackToSetup}>返回开赛设置</button>
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -180,29 +157,6 @@
   .board-caption {
     font-size: 0.72rem;
     color: var(--text-secondary);
-  }
-
-  .board-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    max-width: 100%;
-  }
-
-  .board-actions .btn,
-  .board-actions select {
-    min-height: 36px;
-    padding: 5px 8px;
-    font-size: 0.78rem;
-  }
-
-  .board-actions select {
-    max-width: 100%;
-    font-family: inherit;
-    color: var(--text-primary);
-    background: var(--bg-surface);
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
   }
 
   .score-board {

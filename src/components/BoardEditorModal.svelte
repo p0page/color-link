@@ -1,27 +1,30 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { getPieceColor, PIECE_COLORS } from '../lib/colors';
   import { cellKey, coordKey, parseCellKey } from '../lib/engine';
+  import { boardHasRoom, boardLayoutKey, generateRandomBoard } from '../lib/round-boards';
   import { generateId, sanitizeBlueprint } from '../lib/storage';
-  import type { BoardBlueprint, CellKey, SavedBoard } from '../lib/types';
+  import type { BoardBlueprint, CellKey, MatchBoard, SavedBoard } from '../lib/types';
   import BoardPreview from './BoardPreview.svelte';
   import BoardViewport from './BoardViewport.svelte';
 
   interface Props {
     initialBlueprint: BoardBlueprint;
-    initialBoardId: string | null;
-    initialBoardName: string;
+    initialBoard?: MatchBoard;
+    roundNumber: number;
+    minimum: number;
     savedBoards: SavedBoard[];
     onSaveBoard: (board: SavedBoard) => void;
     onDeleteBoard: (id: string) => void;
-    onApply: (blueprint: BoardBlueprint, boardName: string, boardId: string | null) => void;
+    onApply: (board: SavedBoard) => void;
     onClose: () => void;
   }
 
   let {
     initialBlueprint,
-    initialBoardId,
-    initialBoardName,
+    initialBoard,
+    roundNumber,
+    minimum,
     savedBoards,
     onSaveBoard,
     onDeleteBoard,
@@ -31,9 +34,16 @@
 
   const seed = untrack(() => ({
     blueprint: sanitizeBlueprint(initialBlueprint),
-    boardId: initialBoardId,
-    boardName: initialBoardName,
+    savedBoard: initialBoard,
   }));
+
+  type SupportedLayout = Pick<SavedBoard, 'blueprint' | 'supportedMinPathLength'>;
+  interface EditorDraft {
+    blueprint: BoardBlueprint;
+    id: string | null;
+    name: string;
+    supportedLayout: SupportedLayout | undefined;
+  }
 
   function buildBlockedRecord(bp: BoardBlueprint): Record<CellKey, true> {
     const rec: Record<CellKey, true> = {};
@@ -56,14 +66,25 @@
   let blockedMap = $state<Record<CellKey, true>>(buildBlockedRecord(seed.blueprint));
   let presetMap = $state<Record<CellKey, number>>(buildPresetRecord(seed.blueprint));
 
-  let editingBoardId = $state<string | null>(seed.boardId);
-  let boardName = $state(seed.boardName === '空白棋盘' ? '' : seed.boardName);
+  let editingBoardId = $state<string | null>(seed.savedBoard?.id ?? null);
+  let boardName = $state(seed.savedBoard?.name ?? '');
+  let supportedLayout = $state.raw<SupportedLayout | undefined>(seed.savedBoard);
+  let beforeRoll = $state.raw<EditorDraft>();
   let tool = $state<'block' | 'piece' | 'erase'>('block');
   let selectedColorId = $state(0);
   let dragAction = $state<'block' | 'unblock' | 'erase' | null>(null);
   let paintedOnPointerDown = false;
   let notice = $state<string | null>(null);
   let noticeTimer: ReturnType<typeof setTimeout> | null = null;
+  let dialog: HTMLDialogElement;
+  let nameInput: HTMLInputElement;
+
+  onMount(() => {
+    dialog.showModal();
+    return () => {
+      if (noticeTimer) clearTimeout(noticeTimer);
+    };
+  });
 
   function showNotice(msg: string) {
     notice = msg;
@@ -96,6 +117,34 @@
       colorId,
     }));
     return sanitizeBlueprint({ rows, cols, blockedCells, presetPieces });
+  }
+
+  function loadBlueprint(blueprint: BoardBlueprint) {
+    rows = blueprint.rows;
+    cols = blueprint.cols;
+    blockedMap = buildBlockedRecord(blueprint);
+    presetMap = buildPresetRecord(blueprint);
+  }
+
+  function rollBoard() {
+    if (rows * cols < minimum) return;
+    beforeRoll ??= { blueprint: currentBlueprint(), id: editingBoardId, name: boardName, supportedLayout };
+    const generated = generateRandomBoard(rows, cols, minimum);
+    loadBlueprint(generated.blueprint);
+    if (editingBoardId) boardName = '';
+    editingBoardId = null;
+    supportedLayout = { blueprint: generated.blueprint, supportedMinPathLength: generated.supportedMinPathLength };
+    showNotice('已生成新棋盘。满意后可保存到地图库。');
+  }
+
+  function undoRoll() {
+    if (!beforeRoll) return;
+    loadBlueprint(beforeRoll.blueprint);
+    editingBoardId = beforeRoll.id;
+    boardName = beforeRoll.name;
+    supportedLayout = beforeRoll.supportedLayout;
+    beforeRoll = undefined;
+    showNotice('已恢复随机生成之前的棋盘。');
   }
 
   function applyDimensions(nextRowsRaw: number, nextColsRaw: number) {
@@ -244,31 +293,46 @@
     presetMap = {};
   }
 
-  function handleSave(asNew: boolean) {
+  function handleSave(asNew: boolean, apply = false) {
     const bp = currentBlueprint();
-    const defaultName = `自定义棋盘 ${bp.rows}×${bp.cols}`;
-    const finalName = boardName.trim() || defaultName;
+    const finalName = boardName.trim();
+    if (!finalName) {
+      showNotice('请先给地图取名。');
+      nameInput.focus();
+      return;
+    }
     const id = asNew || !editingBoardId ? generateId('board') : editingBoardId;
+    const verified = supportedLayout && boardLayoutKey(supportedLayout.blueprint) === boardLayoutKey(bp)
+      ? supportedLayout.supportedMinPathLength : undefined;
     const board: SavedBoard = {
       id,
       name: finalName,
       updatedAt: new Date().toISOString(),
       blueprint: bp,
+      supportedMinPathLength: verified,
     };
+    if (apply) {
+      if (!boardHasRoom(board, minimum)) {
+        showNotice(`这张地图不符合本场至少 ${minimum} 格的连线要求。`);
+        return;
+      }
+      onApply(board);
+      return;
+    }
     editingBoardId = id;
     boardName = finalName;
+    supportedLayout = board;
+    beforeRoll = undefined;
     onSaveBoard(board);
     showNotice(`已保存棋盘「${finalName}」到本地`);
   }
 
   function handleLoadSaved(board: SavedBoard) {
-    const clean = sanitizeBlueprint(board.blueprint);
-    rows = clean.rows;
-    cols = clean.cols;
-    blockedMap = buildBlockedRecord(clean);
-    presetMap = buildPresetRecord(clean);
+    loadBlueprint(sanitizeBlueprint(board.blueprint));
     editingBoardId = board.id;
     boardName = board.name;
+    supportedLayout = board;
+    beforeRoll = undefined;
     showNotice(`已载入棋盘「${board.name}」`);
   }
 
@@ -277,32 +341,30 @@
     if (editingBoardId === board.id) {
       editingBoardId = null;
     }
+    if (beforeRoll?.id === board.id) beforeRoll = { ...beforeRoll, id: null };
     showNotice(`已删除棋盘「${board.name}」`);
   }
 
-  function handleApplyToMatch() {
-    const bp = currentBlueprint();
-    const isBlank = bp.blockedCells.length === 0 && bp.presetPieces.length === 0;
-    const resolvedName = boardName.trim() || (isBlank ? '空白棋盘' : `自定义棋盘 ${bp.rows}×${bp.cols}`);
-    onApply(bp, resolvedName, isBlank ? null : editingBoardId);
-  }
 </script>
 
 <svelte:window onpointerup={stopPainting} onpointercancel={stopPainting} onblur={stopPainting} />
 
-<div class="modal-backdrop" role="dialog" aria-modal="true" aria-label="棋盘编辑器">
+<dialog class="modal-backdrop" bind:this={dialog} aria-label="棋盘编辑器"
+  oncancel={(event) => { event.preventDefault(); onClose(); }}>
   <div class="editor-shell">
     <header class="editor-header">
-      <div>
-        <h2>棋盘编辑器</h2>
-        <p class="subtitle">自由绘制黑色障碍块与预先放置 A–Z 棋子，可保存到本地重复使用</p>
-      </div>
+      <h2>第 {roundNumber} 局 · 自定义地图</h2>
+      <label class="name-field">
+        <span>地图名称</span>
+        <input type="text" maxlength="24" placeholder="给地图取名" bind:value={boardName} bind:this={nameInput} class="name-input" />
+      </label>
       <div class="header-actions">
         <button type="button" class="btn btn-ghost small" onclick={onClose}>取消</button>
-        <button type="button" class="btn btn-primary small" onclick={handleApplyToMatch}>
-          应用到当前对局
+        <button type="button" class="btn btn-primary small" onclick={() => handleSave(false, true)}>
+          保存并用在第 {roundNumber} 局
         </button>
       </div>
+      {#if notice}<div class="editor-notice" role="status">{notice}</div>{/if}
     </header>
 
     <div class="editor-body">
@@ -371,6 +433,14 @@
               />
             </label>
           </div>
+        </div>
+
+        <div class="roll-toolbar">
+          <button type="button" class="btn btn-ghost small" disabled={rows * cols < minimum} onclick={rollBoard}>随机生成棋盘</button>
+          {#if rows * cols < minimum}<span class="tip-line">扩大棋盘以满足至少 {minimum} 格的连线要求。</span>{/if}
+          {#if beforeRoll}
+            <button type="button" class="mini-btn" onclick={undoRoll}>恢复生成前的棋盘</button>
+          {/if}
         </div>
 
         {#if tool === 'piece'}
@@ -476,24 +546,13 @@
           {/if}
         </div>
 
-        {#if notice}
-          <div class="editor-notice">{notice}</div>
-        {/if}
       </section>
 
       <aside class="side-pane">
         <div class="panel-card">
-          <div class="panel-title">保存棋盘到本地</div>
-          <input
-            type="text"
-            maxlength="24"
-            placeholder="输入棋盘名称（如：十字迷宫）"
-            bind:value={boardName}
-            class="name-input"
-          />
           <div class="save-btn-row">
             <button type="button" class="btn btn-ghost small" onclick={() => handleSave(false)}>
-              {editingBoardId ? '更新保存' : '保存到本地'}
+              {editingBoardId ? '更新保存' : '保存到地图库'}
             </button>
             {#if editingBoardId}
               <button type="button" class="btn btn-ghost small" onclick={() => handleSave(true)}>
@@ -532,19 +591,34 @@
       </aside>
     </div>
   </div>
-</div>
+</dialog>
 
 <style>
   .modal-backdrop {
     position: fixed;
     inset: 0;
     z-index: 60;
-    background: var(--modal-overlay);
-    backdrop-filter: blur(4px);
-    display: flex;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    color: var(--text-primary);
+    background: transparent;
+    overflow: hidden;
     align-items: center;
     justify-content: center;
     padding: 16px;
+  }
+
+  .modal-backdrop[open] {
+    display: flex;
+  }
+
+  .modal-backdrop::backdrop {
+    background: var(--modal-overlay);
+    backdrop-filter: blur(4px);
   }
 
   .editor-shell {
@@ -577,10 +651,17 @@
     color: var(--text-primary);
   }
 
-  .subtitle {
-    margin: 3px 0 0;
+  .name-field {
+    display: flex;
+    align-items: center;
+    flex: 1 1 180px;
+    gap: 8px;
     font-size: 0.78rem;
     color: var(--text-muted);
+  }
+
+  .name-field span {
+    flex-shrink: 0;
   }
 
   .header-actions {
@@ -818,6 +899,17 @@
     line-height: 1;
   }
 
+  .roll-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .roll-toolbar button {
+    min-height: 44px;
+  }
+
   .canvas-footer {
     display: flex;
     align-items: center;
@@ -878,11 +970,8 @@
   }
 
   .editor-notice {
-    align-self: center;
-    padding: 5px 12px;
-    border-radius: 999px;
-    background: #0f172a;
-    color: #ffffff;
+    flex-basis: 100%;
+    color: var(--text-secondary);
     font-size: 0.78rem;
     font-weight: 600;
   }
@@ -960,6 +1049,7 @@
 
   .name-input {
     width: 100%;
+    min-width: 0;
     padding: 8px 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-strong);
@@ -1081,6 +1171,11 @@
 
     .editor-header {
       flex-shrink: 0;
+      gap: 8px;
+    }
+
+    .name-field {
+      flex-basis: 100%;
     }
 
     .editor-body {

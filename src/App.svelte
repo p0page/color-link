@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import BoardCanvas from './components/BoardCanvas.svelte';
-  import BoardEditorModal from './components/BoardEditorModal.svelte';
   import BrandTitle from './components/BrandTitle.svelte';
   import ColorPalette from './components/ColorPalette.svelte';
   import FirstPlayerModal from './components/FirstPlayerModal.svelte';
@@ -23,7 +22,6 @@
     clearPendingPieces,
     confirmTurn,
     coordKey,
-    createBlueprint,
     createMatchState,
     declareImpossibility,
     DEFAULT_CONFIG,
@@ -45,7 +43,6 @@
     removePendingPiece,
     requiredPlacementsForTurn,
     resetAllVerifyPieces,
-    setRoundBlueprint,
     startRoundWithFirstPlayer,
     undoLastPendingPiece,
   } from './lib/engine';
@@ -57,15 +54,13 @@
     generateId,
     loadMatchHistory,
     loadSavedBoards,
-    sanitizeBlueprint,
     upsertSavedBoard,
   } from './lib/storage';
   import type { SolveBoardRequest, SolveResult } from './lib/solver';
   import {
-    boardAlternatives, boardHasRoom, boardOptionLabel, CURRENT_BOARD_ID, DEFAULT_BOARD_PLAN, type BoardPlan,
+    boardOptionLabel, SHOW_BOARD_IDS,
   } from './lib/round-boards';
   import type {
-    BoardBlueprint,
     Coord,
     GameConfig,
     GameState,
@@ -76,16 +71,11 @@
   } from './lib/types';
 
   let savedConfig = $state<GameConfig>({ ...DEFAULT_CONFIG, playerNames: [...DEFAULT_CONFIG.playerNames] });
-  let activeBlueprint = $state<BoardBlueprint>(createBlueprint(DEFAULT_CONFIG.rows, DEFAULT_CONFIG.cols));
-  let activeBoardId = $state<string | null>(null);
-  let activeBoardName = $state<string>('空白棋盘');
-  let boardPlan = $state.raw<BoardPlan>(DEFAULT_BOARD_PLAN);
+  let boardSelections = $state.raw<string[]>([...SHOW_BOARD_IDS]);
   let roundBoards = $state.raw<MatchBoard[]>([]);
-  let matchBoardPool = $state.raw<MatchBoard[]>([]);
 
   let savedBoards = $state<SavedBoard[]>(loadSavedBoards());
   let matchHistory = $state<MatchHistoryRecord[]>(loadMatchHistory());
-  let showBoardEditor = $state(false);
   let showHistory = $state(false);
   let currentMatchId = $state<string>(generateId('match'));
   let recordedMatchId = $state<string | null>(null);
@@ -141,14 +131,6 @@
   const boardSize = $derived(`${game.config.rows}×${game.config.cols}`);
   const currentRoundBoard = $derived(roundBoards[game.roundNumber - 1]);
   const nextRoundBoard = $derived(roundBoards[game.roundNumber]);
-  const randomSwaps = $derived(currentRoundBoard && boardPlan.mode !== 'same'
-    ? boardAlternatives(currentRoundBoard, roundBoards, matchBoardPool)
-    : []);
-  const swapChoices = $derived(boardPlan.mode === 'same' ? [] : [
-    ...matchBoardPool,
-    ...savedBoards.filter(({ id }) => !matchBoardPool.some((board) => board.id === id)),
-    { id: CURRENT_BOARD_ID, name: `当前棋盘 · ${activeBoardName}`, blueprint: activeBlueprint },
-  ].filter((board) => board.id !== currentRoundBoard?.id && boardHasRoom(board, game.config.minPathLength)));
   $effect(() => {
     if (solverJob && game !== solverJob.position) stopAutoSolve();
   });
@@ -229,7 +211,7 @@
         scores: [game.scores[0], game.scores[1]],
         winner: game.lastRoundResult.winner,
         targetWins: game.config.targetWins,
-        boardName: firstBoard?.name ?? activeBoardName,
+        boardName: firstBoard?.name ?? '空白棋盘',
         rows: firstBlueprint.rows,
         cols: firstBlueprint.cols,
         minPathLength: game.config.minPathLength,
@@ -256,34 +238,12 @@
     highlightedColorId = null;
   }
 
-  function handleUpdateBlueprint(blueprint: BoardBlueprint, name: string, boardId: string | null) {
-    activeBlueprint = sanitizeBlueprint(blueprint);
-    activeBoardName = name;
-    activeBoardId = boardId;
-    savedConfig = {
-      ...savedConfig,
-      rows: activeBlueprint.rows,
-      cols: activeBlueprint.cols,
-    };
-  }
-
   function handleSaveBoardToStorage(board: SavedBoard) {
     savedBoards = upsertSavedBoard(board);
-    if (activeBoardId === board.id) {
-      activeBoardName = board.name;
-    }
   }
 
   function handleDeleteBoardFromStorage(id: string) {
     savedBoards = deleteSavedBoard(id);
-    if (activeBoardId === id) {
-      activeBoardId = null;
-    }
-  }
-
-  function handleApplyEditorBoard(blueprint: BoardBlueprint, name: string, boardId: string | null) {
-    handleUpdateBlueprint(blueprint, name, boardId);
-    showBoardEditor = false;
   }
 
   function handleDeleteHistoryItem(id: string) {
@@ -294,27 +254,14 @@
     matchHistory = clearMatchHistory();
   }
 
-  function handleStartMatch(config: GameConfig, plan: BoardPlan, schedule: MatchBoard[], pool: MatchBoard[]) {
-    boardPlan = plan;
+  function handleStartMatch(config: GameConfig, schedule: MatchBoard[], selections: string[]) {
+    boardSelections = selections;
     roundBoards = schedule;
-    matchBoardPool = pool;
     savedConfig = { ...config, playerNames: [...config.playerNames] };
     currentMatchId = generateId('match');
     recordedMatchId = null;
     game = createMatchState(savedConfig, schedule[0].blueprint);
     resetTransientUi();
-  }
-
-  function handleSwapRoundBoard(board: MatchBoard) {
-    if (game.phase !== 'select_first') return;
-    const index = game.roundNumber - 1;
-    roundBoards = roundBoards.map((existing, slot) => slot === index ? board : existing);
-    game = setRoundBlueprint(game, board.blueprint);
-  }
-
-  function handleRandomBoardSwap() {
-    if (randomSwaps.length === 0) return;
-    handleSwapRoundBoard(randomSwaps[Math.floor(Math.random() * randomSwaps.length)]);
   }
 
   function handleSelectFirstPlayer(player: PlayerId) {
@@ -668,8 +615,7 @@
   function handleRematch() {
     currentMatchId = generateId('match');
     recordedMatchId = null;
-    const blueprint = roundBoards[0]?.blueprint ?? sanitizeBlueprint(activeBlueprint);
-    game = setRoundBlueprint(createMatchState(savedConfig, blueprint), blueprint);
+    game = createMatchState(savedConfig, roundBoards[0]?.blueprint);
     resetTransientUi();
   }
 
@@ -683,10 +629,6 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
-      if (showBoardEditor) {
-        showBoardEditor = false;
-        return;
-      }
       if (showHistory) {
         showHistory = false;
         return;
@@ -711,14 +653,11 @@
 {#if game.phase === 'setup'}
   <SetupView
     initialConfig={savedConfig}
-    initialBoardPlan={boardPlan}
-    {activeBlueprint}
-    {activeBoardId}
-    {activeBoardName}
+    initialSelections={boardSelections}
     {savedBoards}
     historyCount={matchHistory.length}
-    onUpdateBlueprint={handleUpdateBlueprint}
-    onOpenEditor={() => (showBoardEditor = true)}
+    onSaveBoard={handleSaveBoardToStorage}
+    onDeleteBoard={handleDeleteBoardFromStorage}
     onOpenHistory={() => (showHistory = true)}
     onStart={handleStartMatch}
   />
@@ -979,10 +918,6 @@
     <FirstPlayerModal
       roundNumber={game.roundNumber}
       {currentRoundBoard}
-      {swapChoices}
-      canRandomSwap={randomSwaps.length > 0}
-      onSwapBoard={handleSwapRoundBoard}
-      onRandomSwap={handleRandomBoardSwap}
       playerNames={game.config.playerNames}
       scores={game.scores}
       targetWins={game.config.targetWins}
@@ -1004,19 +939,6 @@
       onBackToSetup={handleBackToSetup}
     />
   {/if}
-{/if}
-
-{#if showBoardEditor}
-  <BoardEditorModal
-    initialBlueprint={activeBlueprint}
-    initialBoardId={activeBoardId}
-    initialBoardName={activeBoardName}
-    {savedBoards}
-    onSaveBoard={handleSaveBoardToStorage}
-    onDeleteBoard={handleDeleteBoardFromStorage}
-    onApply={handleApplyEditorBoard}
-    onClose={() => (showBoardEditor = false)}
-  />
 {/if}
 
 {#if showHistory}

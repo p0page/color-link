@@ -89,9 +89,10 @@ describe('storage & blueprint sanitization', () => {
     expect(loadSavedBoards()).toHaveLength(1);
     expect(loadSavedBoards()[0].name).toBe('十字迷宫');
 
-    upsertSavedBoard({ ...boardA, name: '十字迷宫 v2' });
+    upsertSavedBoard({ ...boardA, name: '十字迷宫 v2', supportedMinPathLength: 8 });
     expect(loadSavedBoards()).toHaveLength(1);
     expect(loadSavedBoards()[0].name).toBe('十字迷宫 v2');
+    expect(loadSavedBoards()[0].supportedMinPathLength).toBe(8);
 
     deleteSavedBoard('board_a');
     expect(loadSavedBoards()).toHaveLength(0);

@@ -64,11 +64,8 @@ export interface RoundResult {
   board?: { id: string; name: string; rows: number; cols: number };
 }
 
-export interface SavedBoard {
-  id: string;
-  name: string;
+export interface SavedBoard extends Pick<MatchBoard, 'id' | 'name' | 'blueprint' | 'supportedMinPathLength'> {
   updatedAt: string;
-  blueprint: BoardBlueprint;
 }
 
 export interface MatchHistoryRecord {

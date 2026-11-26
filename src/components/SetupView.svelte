@@ -1,59 +1,41 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
-  import {
-    boardHasRoom, boardOptionLabel, createBoardLibrary, CURRENT_BOARD_ID, planRoundBoards, randomBoardPool,
-    type BoardMode, type BoardPlan,
-  } from '../lib/round-boards';
-  import { sanitizeBlueprint } from '../lib/storage';
-  import type { BoardBlueprint, GameConfig, MatchBoard, SavedBoard } from '../lib/types';
+  import { tick, untrack } from 'svelte';
+  import { createBlueprint } from '../lib/engine';
+  import { boardHasRoom, boardOptionLabel, createBoardLibrary, drawRoundBoards, SHOW_BOARD_IDS } from '../lib/round-boards';
+  import type { GameConfig, MatchBoard, SavedBoard } from '../lib/types';
+  import BoardEditorModal from './BoardEditorModal.svelte';
+  import BoardGallery from './BoardGallery.svelte';
   import BoardInfo from './BoardInfo.svelte';
+  import BoardPicker from './BoardPicker.svelte';
   import BoardPreview from './BoardPreview.svelte';
   import BoardPreviewDialog from './BoardPreviewDialog.svelte';
   import BrandTitle from './BrandTitle.svelte';
 
   interface Props {
     initialConfig: GameConfig;
-    initialBoardPlan: BoardPlan;
-    activeBlueprint: BoardBlueprint;
-    activeBoardId: string | null;
-    activeBoardName: string;
+    initialSelections: string[];
     savedBoards: SavedBoard[];
     historyCount: number;
-    onUpdateBlueprint: (blueprint: BoardBlueprint, boardName: string, boardId: string | null) => void;
-    onOpenEditor: () => void;
+    onSaveBoard: (board: SavedBoard) => void;
+    onDeleteBoard: (id: string) => void;
     onOpenHistory: () => void;
-    onStart: (config: GameConfig, plan: BoardPlan, schedule: MatchBoard[], pool: MatchBoard[]) => void;
+    onStart: (config: GameConfig, schedule: MatchBoard[], selections: string[]) => void;
   }
 
-  let {
-    initialConfig,
-    initialBoardPlan,
-    activeBlueprint,
-    activeBoardId,
-    activeBoardName,
-    savedBoards,
-    historyCount,
-    onUpdateBlueprint,
-    onOpenEditor,
-    onOpenHistory,
-    onStart,
-  }: Props = $props();
+  let { initialConfig, initialSelections, savedBoards, historyCount, onSaveBoard, onDeleteBoard, onOpenHistory, onStart }: Props = $props();
 
   const seed = untrack(() => initialConfig);
-  const planSeed = untrack(() => ({ ...initialBoardPlan, selections: [...initialBoardPlan.selections] }));
   const formats = [
     { wins: 1, label: '一局定胜负' },
     { wins: 2, label: '三局两胜' },
     { wins: 3, label: '五局三胜' },
   ];
-  const modes: { id: BoardMode; label: string }[] = [
-    { id: 'random', label: '每局随机' },
-    { id: 'per-round', label: '逐局指定' },
-    { id: 'same', label: '全程同一张' },
-  ];
-  let plan = $state<BoardPlan>(planSeed);
-  let creativeRevision = $state(0);
-  let previewBoard = $state.raw<MatchBoard | undefined>();
+  let selections = $state.raw<string[]>(untrack(() => [...initialSelections]));
+  let preview = $state.raw<{ board: MatchBoard; slot?: number }>();
+  let openSlot = $state<number | null>(null);
+  let editorSlot = $state<number | null>(null);
+  let editorSeed = $state.raw<MatchBoard>();
+  let pickerTrigger: HTMLButtonElement | undefined;
 
   let minPathLength = $state(seed.minPathLength);
   let targetWins = $state(seed.targetWins);
@@ -66,70 +48,88 @@
   let player1Name = $state(seed.playerNames[0]);
   let player2Name = $state(seed.playerNames[1]);
 
-  const rows = $derived(activeBlueprint.rows);
-  const cols = $derived(activeBlueprint.cols);
-  const blockedCount = $derived(activeBlueprint.blockedCells.length);
-  const presetCount = $derived(activeBlueprint.presetPieces.length);
-  const isCustomBoard = $derived(blockedCount > 0 || presetCount > 0);
-  const playableCells = $derived(Math.max(2, rows * cols - blockedCount));
   const safeMinPath = $derived(Math.min(400, Math.max(2, Math.floor(minPathLength ?? 6))));
   const totalRounds = $derived(targetWins * 2 - 1);
-  const builtIn = $derived.by(() => {
-    void creativeRevision;
-    return createBoardLibrary(safeMinPath);
-  });
-  const currentBoard: MatchBoard = $derived({
-    id: CURRENT_BOARD_ID,
-    name: activeBoardName,
-    blueprint: activeBlueprint,
-  });
-  const choices: MatchBoard[] = $derived([currentBoard, ...builtIn, ...savedBoards]);
-  const pool = $derived(randomBoardPool(builtIn, plan.includeCustom ? savedBoards : [], safeMinPath));
-  const selectedBoards = $derived(Array.from({ length: plan.mode === 'same' ? 1 : totalRounds }, (_, index) => {
-    if (plan.mode === 'random') return undefined;
-    const id = plan.selections[index] || (plan.mode === 'same' ? CURRENT_BOARD_ID : '');
-    return choices.find((board) => board.id === id) ?? (plan.mode === 'same' ? currentBoard : undefined);
+  const builtIn = createBoardLibrary();
+  const groups = [
+    { title: '节目原版地图', boards: builtIn.filter((board) => board.original) },
+    { title: '创意地图', boards: builtIn.filter((board) => !board.original && !board.id.startsWith('built-in:')) },
+    { title: '空白地图', boards: builtIn.filter((board) => board.id.startsWith('built-in:')) },
+  ];
+  const pool = $derived([...builtIn, ...savedBoards].filter((board) => boardHasRoom(board, safeMinPath)));
+  const selectedBoards = $derived(Array.from({ length: totalRounds }, (_, index): MatchBoard | undefined => {
+    const selection = selections[index] ?? SHOW_BOARD_IDS[index];
+    return savedBoards.find((board) => board.id === selection) ?? builtIn.find((board) => board.id === selection);
   }));
-  const invalidSelection = $derived(selectedBoards.some((board) => board && !boardHasRoom(board, safeMinPath)));
+  const invalidRounds = $derived(selectedBoards.flatMap((board, index) =>
+    board && boardHasRoom(board, safeMinPath) ? [] : [index + 1]));
+  const blankSize = $derived(Math.max(10, Math.ceil(Math.sqrt(safeMinPath))));
+  const editorBlueprint = $derived(editorSeed?.blueprint ?? createBlueprint(blankSize, blankSize));
 
-  function selectRoundBoard(index: number, id: string) {
-    plan.selections[index] = id;
+  function setSelection(index: number, selection: string) {
+    const next = [...selections];
+    next[index] = selection;
+    selections = next;
   }
 
-  function applyBoardPreset(r: number, c: number) {
-    const nextBp = sanitizeBlueprint({
-      ...activeBlueprint,
-      rows: r,
-      cols: c,
-    });
-    const blank = nextBp.blockedCells.length === 0 && nextBp.presetPieces.length === 0;
-    onUpdateBlueprint(nextBp, blank ? '空白棋盘' : activeBoardName, blank ? null : activeBoardId);
+  function togglePicker(index: number, trigger: HTMLButtonElement) {
+    pickerTrigger = trigger;
+    openSlot = openSlot === index ? null : index;
   }
 
-  function changeBoardDimension(input: HTMLInputElement, dimension: 'rows' | 'cols') {
-    const value = Math.min(20, Math.max(4, Math.floor(input.valueAsNumber || activeBlueprint[dimension])));
-    input.value = String(value);
-    applyBoardPreset(dimension === 'rows' ? value : rows, dimension === 'cols' ? value : cols);
+  async function closePicker() {
+    openSlot = null;
+    await tick();
+    pickerTrigger?.focus({ preventScroll: true });
   }
 
-  function handleSelectSaved(board: SavedBoard) {
-    onUpdateBlueprint(sanitizeBlueprint(board.blueprint), board.name, board.id);
+  function chooseBoard(index: number, board: MatchBoard) {
+    setSelection(index, board.id);
+    preview = undefined;
+    void closePicker();
   }
 
-  function handleResetBlank() {
-    onUpdateBlueprint(
-      { rows, cols, blockedCells: [], presetPieces: [] },
-      '空白棋盘',
-      null,
-    );
+  function drawBoardForRound(index: number) {
+    const current = selectedBoards[index];
+    const [board] = drawRoundBoards(pool, [current]);
+    if (board && board.id !== current?.id) chooseBoard(index, board);
+  }
+
+  function refreshSchedule() {
+    const drawn = drawRoundBoards(pool, selectedBoards);
+    if (drawn.length === 0) return;
+    selections = [...drawn.map(({ id }) => id), ...selections.slice(totalRounds)];
+    openSlot = null;
+  }
+
+  function openEditor(index: number, board?: MatchBoard) {
+    editorSeed = board;
+    editorSlot = index;
+    openSlot = null;
+  }
+
+  async function closeEditor(reopenPicker: boolean) {
+    const slot = editorSlot;
+    editorSlot = null;
+    editorSeed = undefined;
+    await tick();
+    if (reopenPicker) openSlot = slot;
+    else pickerTrigger?.focus({ preventScroll: true });
+  }
+
+  function saveAndUseBoard(index: number, board: SavedBoard) {
+    onSaveBoard(board);
+    setSelection(index, board.id);
+    void closeEditor(false);
   }
 
   function handleSubmit(event: SubmitEvent) {
     event.preventDefault();
-    if (invalidSelection) return;
-    const schedule = plan.mode === 'same'
-      ? Array<MatchBoard>(totalRounds).fill(selectedBoards[0] ?? currentBoard)
-      : planRoundBoards(totalRounds, selectedBoards, pool);
+    if (invalidRounds.length > 0 || editorSlot !== null || preview) return;
+    const schedule = selectedBoards.filter((board): board is MatchBoard => board !== undefined)
+      .map((board) => ({ ...board, blueprint: createBlueprint(
+        board.blueprint.rows, board.blueprint.cols, board.blueprint.blockedCells, board.blueprint.presetPieces,
+      ) }));
     const first = schedule[0].blueprint;
     const clampedMoveSec = moveUnlimited
       ? null
@@ -146,7 +146,7 @@
       moveTimeLimitSec: clampedMoveSec,
       verifyTimeLimitSec: clampedVerifySec,
       playerNames: [player1Name.trim() || '玩家 1', player2Name.trim() || '玩家 2'],
-    }, { ...plan, selections: [...plan.selections] }, schedule, pool);
+    }, schedule, [...selections]);
   }
 </script>
 
@@ -175,174 +175,84 @@
             <div class="preset-row" role="group" aria-labelledby="match-format">
               {#each formats as format (format.wins)}
                 <button type="button" class="chip" class:active={targetWins === format.wins}
-                  aria-pressed={targetWins === format.wins} onclick={() => (targetWins = format.wins)}>
+                  aria-pressed={targetWins === format.wins} onclick={() => {
+                    openSlot = null;
+                    targetWins = format.wins;
+                  }}>
                   {format.label}
                 </button>
               {/each}
             </div>
           </div>
-          <div>
-            <h2 id="board-mode">地图安排</h2>
-            <div class="preset-row" role="group" aria-labelledby="board-mode">
-              {#each modes as mode (mode.id)}
-                <button type="button" class="chip" class:active={plan.mode === mode.id}
-                  aria-pressed={plan.mode === mode.id} onclick={() => (plan.mode = mode.id)}>
-                  {mode.label}
-                </button>
-              {/each}
-            </div>
-          </div>
         </div>
-        {#if plan.mode === 'random'}
-          <div class="schedule-note-row">
-            <p class="schedule-note">开赛前安排最多 {totalRounds} 局地图。优先使用不同地图，选先手时可换图。</p>
-            <button type="button" class="chip" onclick={() => (creativeRevision += 1)}>
-              换一批创意图
-            </button>
+        <div class="map-heading">
+          <div>
+            <h2>逐局选图</h2>
+            <p class="schedule-note">开赛后按此顺序使用地图。</p>
           </div>
-          <details class="board-pool">
-            <summary>查看随机地图池（{pool.length} 张）</summary>
-            <div class="pool-grid">
-              {#each pool as board (board.id)}
-                <div class="pool-board">
+          <button type="button" class="chip shuffle-button" disabled={pool.length === 0}
+            onclick={refreshSchedule}>随机换一组</button>
+        </div>
+        <div class="round-board-list">
+          {#each selectedBoards as board, index (index)}
+            {@const unavailable = !board || !boardHasRoom(board, safeMinPath)}
+            <div class="board-choice" class:choosing={openSlot === index} class:unavailable>
+              <div class="board-choice-heading">
+                <span class="round-label">第 {index + 1} 局</span>
+                {#if board?.original}<span class="board-origin">原版</span>{/if}
+              </div>
+              <div class="board-choice-body">
+                {#if board}
                   <BoardPreview blueprint={board.blueprint} size={46} label={`预览 ${boardOptionLabel(board)}`}
-                    onOpen={() => (previewBoard = board)} />
-                  <BoardInfo {board} />
-                </div>
-              {/each}
-            </div>
-          </details>
-        {:else}
-          <div class="round-board-list">
-            {#each selectedBoards as board, index (index)}
-              <div class="board-choice">
-                <div class="board-choice-heading">
-                  <label class="round-label" for={`schedule-board-${index}`}>
-                    {plan.mode === 'same' ? '全程使用' : `第 ${index + 1} 局`}
-                  </label>
-                  {#if board?.original}<span class="board-origin">原版</span>{/if}
-                </div>
-                <div class="board-choice-body">
-                  {#if board}
-                    <BoardPreview blueprint={board.blueprint} size={46} label={`预览 ${boardOptionLabel(board)}`}
-                      onOpen={() => (previewBoard = board)} />
-                  {/if}
-                  <div class="board-picker">
-                    <div class="board-picker-label" aria-hidden="true">
-                      {#if board}<BoardInfo {board} showOrigin={false} />{:else}<strong>随机选图</strong>{/if}
-                    </div>
-                    <select id={`schedule-board-${index}`} value={board?.id ?? ''}
-                      onchange={(event) => selectRoundBoard(index, event.currentTarget.value)}>
-                      {#if plan.mode === 'per-round'}<option value="">随机选图</option>{/if}
-                      {#each choices as option (option.id)}
-                        <option value={option.id} disabled={!boardHasRoom(option, safeMinPath)}>
-                          {option.id === CURRENT_BOARD_ID ? '当前棋盘 · ' : ''}{boardOptionLabel(option)}
-                        </option>
-                      {/each}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            {/each}
-          </div>
-        {/if}
-        {#if invalidSelection}
-          <p class="schedule-note caution" role="status">所选棋盘不支持当前最小连接格数，请换图或调小格数。</p>
-        {/if}
-        <details class="custom-settings">
-          <summary>自定义棋盘</summary>
-          <div class="custom-content">
-            <div class="label-row">
-              <span class="field-label">棋盘尺寸</span>
-              <div class="preset-row">
-                <button type="button" class="chip" class:active={rows === 8 && cols === 8} onclick={() => applyBoardPreset(8, 8)}>8×8</button>
-                <button type="button" class="chip" class:active={rows === 10 && cols === 10} onclick={() => applyBoardPreset(10, 10)}>10×10</button>
-                <button type="button" class="chip" class:active={rows === 12 && cols === 12} onclick={() => applyBoardPreset(12, 12)}>12×12</button>
-              </div>
-            </div>
-            <div class="board-editor-bar">
-              <BoardPreview blueprint={activeBlueprint} size={82} label={`预览 ${boardOptionLabel(currentBoard)}`}
-                onOpen={() => (previewBoard = currentBoard)} />
-              <div class="board-summary">
-                <strong class="board-summary-title">{activeBoardName}</strong>
-                <div class="board-summary-meta tabular">
-                  <span>{rows}×{cols}</span>
-                  <span>{playableCells} 个可用格</span>
-                  {#if isCustomBoard}
-                    <span>{blockedCount} 个黑块 · {presetCount} 枚预设棋子</span>
-                  {/if}
-                </div>
-                <div class="board-summary-actions">
-                  <button type="button" class="btn btn-ghost editor-btn" onclick={onOpenEditor}>编辑棋盘</button>
-                  <button type="button" class="reset-link" onclick={() => {
-                    plan.mode = 'same';
-                    selectRoundBoard(0, CURRENT_BOARD_ID);
-                  }}>全程使用此图</button>
-                  {#if isCustomBoard}
-                    <button type="button" class="reset-link" onclick={handleResetBlank}>恢复空白棋盘</button>
-                  {/if}
-                </div>
-              </div>
-            </div>
-
-            <div class="size-inputs">
-              <label class="inline-input">
-                <span>行</span>
-                <input
-                  type="number"
-                  min="4"
-                  max="20"
-                  value={rows}
-                  inputmode="numeric"
-                  onchange={(event) => changeBoardDimension(event.currentTarget, 'rows')}
-                />
-              </label>
-              <span class="times">×</span>
-              <label class="inline-input">
-                <span>列</span>
-                <input
-                  type="number"
-                  min="4"
-                  max="20"
-                  value={cols}
-                  inputmode="numeric"
-                  onchange={(event) => changeBoardDimension(event.currentTarget, 'cols')}
-                />
-              </label>
-              <span class="meta-hint">每边 4–20 格</span>
-            </div>
-
-            {#if savedBoards.length > 0}
-              <div class="saved-picker">
-                <span class="saved-picker-label">已存棋盘：</span>
-                <button
-                  type="button"
-                  class="chip"
-                  class:active={!isCustomBoard && activeBoardId === null}
-                  onclick={handleResetBlank}
-                >
-                  空白棋盘
+                    onOpen={() => (preview = { board })} />
+                {/if}
+                <button type="button" class="board-picker" class:expanded={openSlot === index}
+                  aria-label={`更换第 ${index + 1} 局地图${board ? `，${boardOptionLabel(board)}` : ''}`}
+                  aria-expanded={openSlot === index} aria-controls={openSlot === index ? 'schedule-board-gallery' : undefined}
+                  onclick={(event) => togglePicker(index, event.currentTarget)}>
+                  {#if board}<BoardInfo {board} showOrigin={false} />{:else}<strong>选择地图</strong>{/if}
                 </button>
-                {#each savedBoards as board (board.id)}
-                  <button
-                    type="button"
-                    class="chip"
-                    class:active={activeBoardId === board.id}
-                    onclick={() => handleSelectSaved(board)}
-                  >
-                    {board.name} ({board.blueprint.rows}×{board.blueprint.cols})
-                  </button>
-                {/each}
               </div>
+              {#if unavailable}
+                <span class="schedule-note caution">{board ? '不符合连线格数' : '地图已移除，请重新选择'}</span>
+              {/if}
+            </div>
+          {/each}
+        </div>
+        {#if openSlot !== null}
+          {@const index = openSlot}
+          {@const selected = selectedBoards[index]}
+          <BoardPicker id="schedule-board-gallery" title={`选择第 ${index + 1} 局地图`} onClose={closePicker}>
+            <div class="picker-actions">
+              <button type="button" class="btn picker-create" onclick={() => openEditor(index)}>
+                <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                新建自定义地图
+              </button>
+              <button type="button" class="picker-draw" disabled={!pool.some(({ id }) => id !== selected?.id)}
+                onclick={() => drawBoardForRound(index)}>随机选一张</button>
+              {#if savedBoards.some(({ id }) => id === selected?.id)}
+                <button type="button" class="chip" onclick={() => openEditor(index, selected)}>编辑本局地图</button>
+              {/if}
+            </div>
+            {#if savedBoards.length > 0}
+              <h4>自定义地图</h4>
+              <BoardGallery boards={savedBoards} minimum={safeMinPath} selectedId={selected?.id}
+                onPreview={(board) => (preview = { board, slot: index })}
+                onSelect={(board) => chooseBoard(index, board)} />
             {/if}
-            {#if plan.mode !== 'same' && savedBoards.some(({ blueprint }) => blueprint.presetPieces.length === 0 && blueprint.blockedCells.length === 0)}
-              <label class="toggle">
-                <input type="checkbox" bind:checked={plan.includeCustom} />
-                随机时也使用符合格数的自建空白棋盘
-              </label>
-            {/if}
-          </div>
-        </details>
+            {#each groups as group (group.title)}
+              <h4>{group.title}</h4>
+              <BoardGallery boards={group.boards} minimum={safeMinPath} selectedId={selected?.id}
+                onPreview={(board) => (preview = { board, slot: index })}
+                onSelect={(board) => chooseBoard(index, board)} />
+            {/each}
+          </BoardPicker>
+        {/if}
+        {#if invalidRounds.length > 0}
+          <p class="schedule-note caution" role="status">请检查第 {invalidRounds.join('、')} 局的地图和最小连线格数。</p>
+        {/if}
       </section>
 
       <section class="field-group match-settings">
@@ -430,15 +340,24 @@
         <strong>规则速览</strong>
         <p>先手放 1 枚，之后每回合放 2 枚不同色棋子。发起「认定不可能」后，上一手落子方需补齐配对，画出至少 {safeMinPath} 格且互不交叉、重叠的正交路径。全部连线合法即得分。</p>
       </div>
-      <button type="submit" class="btn btn-primary submit-btn" disabled={invalidSelection}>
+      <button type="submit" class="btn btn-primary submit-btn" disabled={invalidRounds.length > 0}>
         开始对局 <span aria-hidden="true">→</span>
       </button>
     </footer>
   </form>
 </div>
 
-{#if previewBoard}
-  <BoardPreviewDialog board={previewBoard} onClose={() => (previewBoard = undefined)} />
+{#if preview}
+  {@const { board, slot } = preview}
+  <BoardPreviewDialog {board} onClose={() => (preview = undefined)}
+    onSelect={slot !== undefined && boardHasRoom(board, safeMinPath) ? () => chooseBoard(slot, board) : undefined} />
+{/if}
+
+{#if editorSlot !== null}
+  {@const slot = editorSlot}
+  <BoardEditorModal initialBlueprint={editorBlueprint} initialBoard={editorSeed} roundNumber={slot + 1}
+    minimum={safeMinPath} {savedBoards} {onSaveBoard} {onDeleteBoard}
+    onApply={(board) => saveAndUseBoard(slot, board)} onClose={() => closeEditor(true)} />
 {/if}
 
 <style>
@@ -564,6 +483,31 @@
     background: var(--bg-elevated);
   }
 
+  .board-choice.choosing {
+    border-color: var(--player-p1-ink);
+    background: var(--player-p1-tint);
+  }
+
+  .board-choice.unavailable {
+    border-color: #e9a76f;
+  }
+
+  .map-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+
+  .map-heading .schedule-note {
+    margin-top: 4px;
+  }
+
+  .shuffle-button {
+    min-height: 44px;
+  }
+
   .board-choice-heading {
     display: flex;
     align-items: center;
@@ -579,8 +523,7 @@
     font-weight: 600;
   }
 
-  .board-choice-body,
-  .pool-board {
+  .board-choice-body {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -596,33 +539,15 @@
     padding: 5px 16px 5px 5px;
     border-radius: 8px;
     font-size: 0.83rem;
+    text-align: start;
   }
 
-  .board-picker:hover {
+  .board-picker:hover,
+  .board-picker.expanded {
     background: var(--bg-surface);
   }
 
-  .board-picker:has(select:focus-visible) {
-    outline: 2px solid var(--text-secondary);
-    outline-offset: 2px;
-  }
-
-  .board-picker-label {
-    min-width: 0;
-  }
-
-  .board-picker select {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    cursor: pointer;
-    font-size: 16px;
-  }
-
-  .board-picker::after,
-  .custom-settings summary::after {
+  .board-picker::after {
     content: '';
     width: 6px;
     height: 6px;
@@ -638,72 +563,54 @@
     pointer-events: none;
   }
 
+  .board-picker.expanded::after {
+    transform: translateY(3px) rotate(225deg);
+  }
+
   .schedule-note {
     margin: 0;
     color: var(--text-secondary);
     font-size: 0.82rem;
   }
 
-  .schedule-note-row {
+  .picker-actions {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px 12px;
-  }
-
-  .board-pool summary {
-    cursor: pointer;
-    color: var(--text-primary);
-    font-size: 0.82rem;
-    font-weight: 600;
-  }
-
-  .pool-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 158px), 1fr));
+    flex-wrap: wrap;
     gap: 8px;
-    margin-top: 9px;
   }
 
-  .pool-board {
-    padding: 10px;
-    border-radius: var(--radius-sm);
+  .picker-actions button {
+    min-height: 44px;
+  }
+
+  .picker-create {
+    padding: 8px 12px;
+    border: 1px solid var(--border-strong);
     background: var(--bg-elevated);
     font-size: 0.82rem;
   }
 
-  .custom-settings {
-    border-top: 1px solid var(--border-subtle);
+  .picker-create:hover {
+    background: var(--bg-subtle);
   }
 
-  .custom-settings summary {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: fit-content;
-    min-height: 44px;
-    padding-inline: 2px 10px;
-    list-style: none;
-    cursor: pointer;
-    font-size: 0.85rem;
+  .picker-draw {
+    padding: 8px 10px;
+    border-radius: 8px;
+    color: var(--player-p1-ink);
+    font-size: 0.82rem;
     font-weight: 650;
+  }
+
+  .picker-draw:hover:not(:disabled) {
+    background: var(--player-p1-tint);
+  }
+
+  h4 {
+    margin: 10px 0 6px;
     color: var(--text-secondary);
-  }
-
-  .custom-settings summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .custom-settings[open] summary::after {
-    transform: translateY(3px) rotate(225deg);
-  }
-
-  .custom-content {
-    display: grid;
-    gap: 12px;
-    max-width: 560px;
-    padding-top: 4px;
+    font-size: 0.8rem;
   }
 
   .match-settings {
@@ -779,27 +686,6 @@
 
   input:disabled {
     opacity: 0.4;
-  }
-
-  .size-inputs {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .inline-input {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 108px;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-  }
-
-  .times {
-    color: var(--text-muted);
-    font-weight: 700;
   }
 
   .input-with-unit {
@@ -924,76 +810,6 @@
     padding-inline: 24px;
   }
 
-  .board-editor-bar {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 16px;
-    padding: 14px;
-    border-radius: var(--radius-md);
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-subtle);
-  }
-
-  .board-summary {
-    flex: 1 1 120px;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .board-summary-title {
-    font-size: 0.85rem;
-    overflow-wrap: anywhere;
-  }
-
-  .board-summary-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    font-size: 0.78rem;
-    color: var(--text-muted);
-  }
-
-  .board-summary-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-top: 2px;
-  }
-
-  .editor-btn {
-    padding: 5px 11px;
-    font-size: 0.78rem;
-  }
-
-  .reset-link {
-    font-size: 0.76rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-decoration: underline;
-  }
-
-  .reset-link:hover {
-    color: var(--text-primary);
-  }
-
-  .saved-picker {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    padding-top: 2px;
-  }
-
-  .saved-picker-label {
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: var(--text-secondary);
-  }
-
   @media (max-width: 720px) {
     .setup-page {
       padding-inline: max(14px, env(safe-area-inset-left)) max(14px, env(safe-area-inset-right));
@@ -1010,10 +826,8 @@
       min-height: 44px;
     }
 
-    .chip,
-    .editor-btn,
-    .reset-link {
-      min-height: 36px;
+    .chip {
+      min-height: 44px;
     }
 
     .setup-footer {
@@ -1024,13 +838,11 @@
   }
 
   @media (max-width: 540px) {
-    .round-board-list,
-    .pool-grid {
+    .round-board-list {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .board-choice,
-    .pool-board {
+    .board-choice {
       padding: 8px;
     }
 
@@ -1050,13 +862,9 @@
   }
 
   @media (max-width: 360px) {
-    .round-board-list,
-    .pool-grid {
+    .round-board-list {
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .inline-input {
-      width: 88px;
-    }
   }
 </style>
