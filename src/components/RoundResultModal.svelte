@@ -7,6 +7,7 @@
     playerNames: [string, string];
     scores: [number, number];
     targetWins: number;
+    nextBoardName?: string;
     onNextRound: () => void;
     onRematch: () => void;
     onBackToSetup: () => void;
@@ -18,6 +19,7 @@
     playerNames,
     scores,
     targetWins,
+    nextBoardName,
     onNextRound,
     onRematch,
     onBackToSetup,
@@ -94,6 +96,7 @@
           <button type="button" class="btn btn-primary" onclick={onRematch}>同配置再来一赛</button>
           <button type="button" class="btn btn-ghost" onclick={onBackToSetup}>修改游戏配置</button>
         {:else}
+          {#if nextBoardName}<p class="next-map">下一局棋盘 · {nextBoardName}</p>{/if}
           <button type="button" class="btn btn-primary" onclick={onNextRound}>进入第 {result.roundNumber + 1} 局（选先手）</button>
         {/if}
         <button type="button" class="btn btn-ghost" onclick={() => (inspectingBoard = true)}>
@@ -244,6 +247,13 @@
     display: flex;
     flex-direction: column;
     gap: 9px;
+  }
+
+  .next-map {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    overflow-wrap: anywhere;
   }
 
   .peek-bar {

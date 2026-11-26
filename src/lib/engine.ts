@@ -131,21 +131,30 @@ export function startRoundWithFirstPlayer(state: GameState, firstPlayer: PlayerI
   };
 }
 
-export function prepareNextRound(state: GameState): GameState {
+export function setRoundBlueprint(state: GameState, blueprint: BoardBlueprint): GameState {
+  if (state.phase !== 'select_first') return state;
   return {
+    ...state,
+    config: { ...state.config, rows: blueprint.rows, cols: blueprint.cols },
+    blueprint,
+    pieces: createInitialPieces(blueprint),
+  };
+}
+
+export function prepareNextRound(state: GameState, blueprint = state.blueprint): GameState {
+  return setRoundBlueprint({
     ...state,
     phase: 'select_first',
     roundNumber: state.roundNumber + 1,
     firstPlayer: null,
     lastMover: null,
     turnIndex: 0,
-    pieces: createInitialPieces(state.blueprint),
     pendingCoords: [],
     declarer: null,
     verifier: null,
     paths: {},
     lastRoundResult: null,
-  };
+  }, blueprint);
 }
 
 export function requiredPlacementsForTurn(turnIndex: number): number {

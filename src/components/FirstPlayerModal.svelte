@@ -1,16 +1,35 @@
 <script lang="ts">
-  import type { PlayerId } from '../lib/types';
+  import { boardOptionLabel } from '../lib/round-boards';
+  import type { MatchBoard, PlayerId } from '../lib/types';
+  import BoardInfo from './BoardInfo.svelte';
+  import BoardPreview from './BoardPreview.svelte';
+  import BoardPreviewDialog from './BoardPreviewDialog.svelte';
 
   interface Props {
     roundNumber: number;
     playerNames: [string, string];
     scores: [number, number];
     targetWins: number;
+    currentRoundBoard: MatchBoard | undefined;
+    swapChoices: MatchBoard[];
+    canRandomSwap: boolean;
+    onSwapBoard: (board: MatchBoard) => void;
+    onRandomSwap: () => void;
     onSelect: (player: PlayerId) => void;
     onBackToSetup: () => void;
   }
 
-  let { roundNumber, playerNames, scores, targetWins, onSelect, onBackToSetup }: Props = $props();
+  let {
+    roundNumber, playerNames, scores, targetWins, currentRoundBoard, swapChoices, canRandomSwap,
+    onSwapBoard, onRandomSwap, onSelect, onBackToSetup,
+  }: Props = $props();
+  let previewBoard = $state.raw<MatchBoard | undefined>();
+
+  function chooseBoard(event: Event & { currentTarget: HTMLSelectElement }) {
+    const board = swapChoices.find(({ id }) => id === event.currentTarget.value);
+    if (board) onSwapBoard(board);
+    event.currentTarget.value = '';
+  }
 </script>
 
 <div class="modal-backdrop">
@@ -18,6 +37,33 @@
     <div class="round-tag">第 {roundNumber} 局 · 先得 {targetWins} 分获胜</div>
     <h2>请选择本局先手玩家</h2>
     <p class="desc">先手首回合放置 <strong>1 枚</strong> 棋子，之后双方轮流每回合放置 <strong>2 枚不同颜色</strong> 的棋子。</p>
+
+    {#if currentRoundBoard}
+      {@const board = currentRoundBoard}
+      <div class="round-board">
+        <BoardPreview blueprint={board.blueprint} size={48} label={`预览 ${boardOptionLabel(board)}`}
+          onOpen={() => (previewBoard = board)} />
+        <div class="round-board-name">
+          <span class="board-caption">本局棋盘</span>
+          <BoardInfo {board} />
+        </div>
+        {#if canRandomSwap || swapChoices.length > 0}
+          <div class="board-actions">
+            {#if canRandomSwap}
+              <button type="button" class="btn btn-ghost" onclick={onRandomSwap}>随机换图</button>
+            {/if}
+            {#if swapChoices.length > 0}
+              <select aria-label="从地图库换图" onchange={chooseBoard}>
+                <option value="">从地图库换图</option>
+                {#each swapChoices as board (board.id)}
+                  <option value={board.id}>{boardOptionLabel(board)}</option>
+                {/each}
+              </select>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     <div class="score-board tabular" aria-label="当前比分">
       <div class="score-caption">当前比分</div>
@@ -55,6 +101,10 @@
     </div>
   </div>
 </div>
+
+{#if previewBoard}
+  <BoardPreviewDialog board={previewBoard} onClose={() => (previewBoard = undefined)} />
+{/if}
 
 <style>
   .modal-backdrop {
@@ -103,6 +153,56 @@
     color: var(--text-secondary);
     font-size: 0.88rem;
     line-height: 1.5;
+  }
+
+  .round-board {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    margin-bottom: 14px;
+    padding: 9px;
+    text-align: start;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+  }
+
+  .round-board-name {
+    flex: 1;
+    min-width: 80px;
+    display: grid;
+    gap: 3px;
+    overflow-wrap: anywhere;
+    font-size: 0.86rem;
+  }
+
+  .board-caption {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+  }
+
+  .board-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-width: 100%;
+  }
+
+  .board-actions .btn,
+  .board-actions select {
+    min-height: 36px;
+    padding: 5px 8px;
+    font-size: 0.78rem;
+  }
+
+  .board-actions select {
+    max-width: 100%;
+    font-family: inherit;
+    color: var(--text-primary);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
   }
 
   .score-board {

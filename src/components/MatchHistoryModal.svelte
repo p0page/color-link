@@ -104,17 +104,22 @@
         <div class="record-list">
           {#each records as rec (rec.id)}
             {@const isExpanded = Boolean(expandedIds[rec.id])}
+            {@const multipleBoards = rec.rounds.some((round) => round.board && round.board.id !== rec.rounds[0]?.board?.id)}
             <article class="record-card">
               <div class="record-top">
                 <span class="record-time tabular">{formatDate(rec.playedAt)}</span>
                 <div class="record-meta-tags">
-                  <span class="meta-pill">{rec.boardName}</span>
-                  <span class="meta-pill tabular">{rec.rows}×{rec.cols}</span>
-                  {#if rec.blockedCount > 0}
-                    <span class="meta-pill dark tabular">{rec.blockedCount} 黑块</span>
-                  {/if}
-                  {#if rec.presetCount > 0}
-                    <span class="meta-pill tabular">{rec.presetCount} 预设子</span>
+                  {#if multipleBoards}
+                    <span class="meta-pill">多张棋盘</span>
+                  {:else}
+                    <span class="meta-pill">{rec.boardName}</span>
+                    <span class="meta-pill tabular">{rec.rows}×{rec.cols}</span>
+                    {#if rec.blockedCount > 0}
+                      <span class="meta-pill dark tabular">{rec.blockedCount} 黑块</span>
+                    {/if}
+                    {#if rec.presetCount > 0}
+                      <span class="meta-pill tabular">{rec.presetCount} 预设子</span>
+                    {/if}
                   {/if}
                   <span class="meta-pill tabular">最短 {rec.minPathLength} 格 · {rec.targetWins} 胜</span>
                 </div>
@@ -171,6 +176,10 @@
                         {rec.playerNames[round.winner]} +1 分
                       </span>
                       <span class="r-reason">{reasonLabel(round.reason)}</span>
+                      {#if round.board}
+                        {@const size = `${round.board.rows}×${round.board.cols}`}
+                        <span class="r-map">{round.board.name}{round.board.name.endsWith(size) ? '' : ` · ${size}`}</span>
+                      {/if}
                     </div>
                   {/each}
                 </div>
@@ -471,6 +480,13 @@
 
   .r-reason {
     color: var(--text-muted);
+  }
+
+  .r-map {
+    grid-column: 1 / -1;
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
   }
 
   @media (max-width: 680px) {

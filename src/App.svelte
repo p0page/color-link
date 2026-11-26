@@ -45,6 +45,7 @@
     removePendingPiece,
     requiredPlacementsForTurn,
     resetAllVerifyPieces,
+    setRoundBlueprint,
     startRoundWithFirstPlayer,
     undoLastPendingPiece,
   } from './lib/engine';
@@ -60,11 +61,15 @@
     upsertSavedBoard,
   } from './lib/storage';
   import type { SolveBoardRequest, SolveResult } from './lib/solver';
+  import {
+    boardAlternatives, boardHasRoom, boardOptionLabel, CURRENT_BOARD_ID, DEFAULT_BOARD_PLAN, type BoardPlan,
+  } from './lib/round-boards';
   import type {
     BoardBlueprint,
     Coord,
     GameConfig,
     GameState,
+    MatchBoard,
     MatchHistoryRecord,
     PlayerId,
     SavedBoard,
@@ -74,6 +79,9 @@
   let activeBlueprint = $state<BoardBlueprint>(createBlueprint(DEFAULT_CONFIG.rows, DEFAULT_CONFIG.cols));
   let activeBoardId = $state<string | null>(null);
   let activeBoardName = $state<string>('空白棋盘');
+  let boardPlan = $state.raw<BoardPlan>(DEFAULT_BOARD_PLAN);
+  let roundBoards = $state.raw<MatchBoard[]>([]);
+  let matchBoardPool = $state.raw<MatchBoard[]>([]);
 
   let savedBoards = $state<SavedBoard[]>(loadSavedBoards());
   let matchHistory = $state<MatchHistoryRecord[]>(loadMatchHistory());
@@ -130,6 +138,17 @@
   const canDeclare = $derived(canDeclareImpossibility(game));
   const canFinishTurn = $derived(canCompleteCurrentTurn(game));
   const evaluation = $derived(evaluateVerification(game));
+  const boardSize = $derived(`${game.config.rows}×${game.config.cols}`);
+  const currentRoundBoard = $derived(roundBoards[game.roundNumber - 1]);
+  const nextRoundBoard = $derived(roundBoards[game.roundNumber]);
+  const randomSwaps = $derived(currentRoundBoard && boardPlan.mode !== 'same'
+    ? boardAlternatives(currentRoundBoard, roundBoards, matchBoardPool)
+    : []);
+  const swapChoices = $derived(boardPlan.mode === 'same' ? [] : [
+    ...matchBoardPool,
+    ...savedBoards.filter(({ id }) => !matchBoardPool.some((board) => board.id === id)),
+    { id: CURRENT_BOARD_ID, name: `当前棋盘 · ${activeBoardName}`, blueprint: activeBlueprint },
+  ].filter((board) => board.id !== currentRoundBoard?.id && boardHasRoom(board, game.config.minPathLength)));
   $effect(() => {
     if (solverJob && game !== solverJob.position) stopAutoSolve();
   });
@@ -201,6 +220,8 @@
       recordedMatchId !== currentMatchId
     ) {
       recordedMatchId = currentMatchId;
+      const firstBoard = roundBoards[0];
+      const firstBlueprint = firstBoard?.blueprint ?? game.blueprint;
       const record: MatchHistoryRecord = {
         id: currentMatchId,
         playedAt: new Date().toISOString(),
@@ -208,14 +229,20 @@
         scores: [game.scores[0], game.scores[1]],
         winner: game.lastRoundResult.winner,
         targetWins: game.config.targetWins,
-        boardName: activeBoardName,
-        rows: game.blueprint.rows,
-        cols: game.blueprint.cols,
+        boardName: firstBoard?.name ?? activeBoardName,
+        rows: firstBlueprint.rows,
+        cols: firstBlueprint.cols,
         minPathLength: game.config.minPathLength,
         colorCount: PIECE_COLORS.length,
-        blockedCount: game.blueprint.blockedCells.length,
-        presetCount: game.blueprint.presetPieces.length,
-        rounds: game.history.map((item) => ({ ...item })),
+        blockedCount: firstBlueprint.blockedCells.length,
+        presetCount: firstBlueprint.presetPieces.length,
+        rounds: game.history.map((item) => {
+          const board = roundBoards[item.roundNumber - 1];
+          return board ? {
+            ...item,
+            board: { id: board.id, name: board.name, rows: board.blueprint.rows, cols: board.blueprint.cols },
+          } : { ...item };
+        }),
       };
       matchHistory = appendMatchHistory(record);
     }
@@ -267,18 +294,27 @@
     matchHistory = clearMatchHistory();
   }
 
-  function handleStartMatch(config: GameConfig) {
-    const cleanBp = sanitizeBlueprint({
-      ...activeBlueprint,
-      rows: config.rows,
-      cols: config.cols,
-    });
-    activeBlueprint = cleanBp;
+  function handleStartMatch(config: GameConfig, plan: BoardPlan, schedule: MatchBoard[], pool: MatchBoard[]) {
+    boardPlan = plan;
+    roundBoards = schedule;
+    matchBoardPool = pool;
     savedConfig = { ...config, playerNames: [...config.playerNames] };
     currentMatchId = generateId('match');
     recordedMatchId = null;
-    game = createMatchState(savedConfig, cleanBp);
+    game = createMatchState(savedConfig, schedule[0].blueprint);
     resetTransientUi();
+  }
+
+  function handleSwapRoundBoard(board: MatchBoard) {
+    if (game.phase !== 'select_first') return;
+    const index = game.roundNumber - 1;
+    roundBoards = roundBoards.map((existing, slot) => slot === index ? board : existing);
+    game = setRoundBlueprint(game, board.blueprint);
+  }
+
+  function handleRandomBoardSwap() {
+    if (randomSwaps.length === 0) return;
+    handleSwapRoundBoard(randomSwaps[Math.floor(Math.random() * randomSwaps.length)]);
   }
 
   function handleSelectFirstPlayer(player: PlayerId) {
@@ -625,14 +661,15 @@
   }
 
   function handleNextRound() {
-    game = prepareNextRound(game);
+    game = prepareNextRound(game, roundBoards[game.roundNumber]?.blueprint);
     resetTransientUi();
   }
 
   function handleRematch() {
     currentMatchId = generateId('match');
     recordedMatchId = null;
-    game = createMatchState(savedConfig, sanitizeBlueprint(activeBlueprint));
+    const blueprint = roundBoards[0]?.blueprint ?? sanitizeBlueprint(activeBlueprint);
+    game = setRoundBlueprint(createMatchState(savedConfig, blueprint), blueprint);
     resetTransientUi();
   }
 
@@ -674,6 +711,7 @@
 {#if game.phase === 'setup'}
   <SetupView
     initialConfig={savedConfig}
+    initialBoardPlan={boardPlan}
     {activeBlueprint}
     {activeBoardId}
     {activeBoardName}
@@ -705,7 +743,7 @@
 
     <section class="match-score" aria-label="当前比分">
       <div class="match-meta">
-        <span class="round-pill">第 {game.roundNumber} 局</span>
+        <span class="round-pill">第 {game.roundNumber} / {roundBoards.length} 局</span>
         <span class="meta-sub">先得 {game.config.targetWins} 分获胜</span>
       </div>
 
@@ -741,7 +779,8 @@
       </div>
 
       <div class="match-rules">
-        <span class="rule-chip">{game.config.rows}×{game.config.cols}</span>
+        {#if currentRoundBoard}<span class="rule-chip map-name">{currentRoundBoard.name}</span>{/if}
+        {#if !currentRoundBoard?.name.endsWith(boardSize)}<span class="rule-chip">{boardSize}</span>{/if}
         <span class="rule-chip">最短 {game.config.minPathLength} 格</span>
         {#if game.blueprint.blockedCells.length > 0}
           <span class="rule-chip">{game.blueprint.blockedCells.length} 黑块</span>
@@ -939,6 +978,11 @@
   {#if game.phase === 'select_first'}
     <FirstPlayerModal
       roundNumber={game.roundNumber}
+      {currentRoundBoard}
+      {swapChoices}
+      canRandomSwap={randomSwaps.length > 0}
+      onSwapBoard={handleSwapRoundBoard}
+      onRandomSwap={handleRandomBoardSwap}
       playerNames={game.config.playerNames}
       scores={game.scores}
       targetWins={game.config.targetWins}
@@ -954,6 +998,7 @@
       playerNames={game.config.playerNames}
       scores={game.scores}
       targetWins={game.config.targetWins}
+      nextBoardName={nextRoundBoard && boardOptionLabel(nextRoundBoard)}
       onNextRound={handleNextRound}
       onRematch={handleRematch}
       onBackToSetup={handleBackToSetup}
@@ -1100,6 +1145,12 @@
     background: var(--bg-elevated);
     border: 1px solid var(--border-subtle);
     white-space: nowrap;
+  }
+
+  .map-name {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .scoreboard {

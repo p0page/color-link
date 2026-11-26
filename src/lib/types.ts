@@ -29,6 +29,14 @@ export interface BoardBlueprint {
   presetPieces: PresetPiece[];
 }
 
+export interface MatchBoard {
+  id: string;
+  name: string;
+  blueprint: BoardBlueprint;
+  original?: boolean;
+  supportedMinPathLength?: number;
+}
+
 export interface GameConfig {
   rows: number;
   cols: number;
@@ -53,6 +61,7 @@ export interface RoundResult {
   reason: RoundEndReason;
   declarer?: PlayerId;
   verifier?: PlayerId;
+  board?: { id: string; name: string; rows: number; cols: number };
 }
 
 export interface SavedBoard {
