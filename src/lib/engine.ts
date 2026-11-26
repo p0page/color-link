@@ -8,6 +8,7 @@ import type {
   GameState,
   Piece,
   PlayerId,
+  PresetPiece,
   RoundEndReason,
   VerificationEvaluation,
 } from './types';
@@ -902,6 +903,23 @@ export function clearAllPaths(state: GameState): GameState {
     ...state,
     paths: {},
   };
+}
+
+export function applyVerificationSolution(
+  state: GameState,
+  paths: GameState['paths'],
+  addedPieces: PresetPiece[],
+): GameState {
+  if (state.phase !== 'verifying' || state.verifier === null) return state;
+  let board = clearAllPaths(state);
+  for (const { coord, colorId } of addedPieces) {
+    const next = placeVerifyPiece(board, coord, colorId);
+    if (next === board) return state;
+    board = next;
+  }
+
+  const verified = checkAutoPassVerification({ ...board, paths });
+  return verified.phase === 'verifying' ? state : verified;
 }
 
 export function eraseAtCell(state: GameState, coord: Coord): GameState {

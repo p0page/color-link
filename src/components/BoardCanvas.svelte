@@ -44,6 +44,7 @@
 
   const rows = $derived(game.blueprint.rows);
   const cols = $derived(game.blueprint.cols);
+  const canInteract = $derived(game.phase === 'playing' || game.phase === 'verifying');
   const blockedSet = $derived(createBlockedSet(game.blueprint));
   const pendingSet = $derived(new Set(game.pendingCoords));
   const singletonSet = $derived(new Set(getSingletonColorIds(game.pieces)));
@@ -130,7 +131,7 @@
       const points = coords
         .map((cell) => `${cell.col * 100 + 50},${cell.row * 100 + 50}`)
         .join(' ');
-      const focusColor = highlightedColorId ?? activeDrawColorId;
+      const focusColor = canInteract ? (highlightedColorId ?? activeDrawColorId) : null;
       list.push({
         colorId,
         points,
@@ -180,6 +181,7 @@
   }
 
   function handleCellClick(coord: Coord) {
+    if (!canInteract) return;
     if (game.phase === 'playing') {
       onPlayingCellClick(coord);
     } else if (game.phase === 'verifying') {
@@ -188,7 +190,7 @@
   }
 
   function handleContextMenu(event: MouseEvent, coord: Coord) {
-    if (game.phase !== 'verifying') {
+    if (!canInteract || game.phase !== 'verifying') {
       return;
     }
     event.preventDefault();
@@ -196,9 +198,9 @@
   }
 </script>
 
-<BoardViewport {rows} {cols}>
+<BoardViewport {rows} {cols} interactive={canInteract}>
 <div class="board-shell">
-  <div class="col-headers" style="grid-template-columns: 24px repeat({cols}, minmax(0, 1fr));">
+  <div class="col-headers" style="grid-template-columns: var(--axis-size) repeat({cols}, minmax(0, 1fr));">
     <div></div>
     {#each colIndices as col (col)}
       <div class="axis-label tabular">{col + 1}</div>
@@ -244,16 +246,16 @@
               (pathOwner !== undefined || piece?.source === 'verify')}
             {@const showPlayGhost = canShowPlayGhost(coord)}
             {@const showVerifyGhost = canShowVerifyGhost(coord)}
-            {@const focusColor = highlightedColorId ?? activeDrawColorId}
+            {@const focusColor = canInteract ? (highlightedColorId ?? activeDrawColorId) : null}
             <button
               type="button"
               class="cell"
               class:blocked={isBlocked}
               class:reachable={isReachable}
               class:erasable-hover={isErasableHover}
-              disabled={isBlocked}
-              aria-label="第 {row + 1} 行第 {col + 1} 列"
-              onpointerenter={(event) => (hoveredCoord = event.pointerType === 'mouse' ? coord : null)}
+              disabled={isBlocked || !canInteract}
+              aria-label={`第 ${row + 1} 行第 ${col + 1} 列`}
+              onpointerenter={canInteract ? (event) => (hoveredCoord = event.pointerType === 'mouse' ? coord : null) : undefined}
               onclick={() => handleCellClick(coord)}
               oncontextmenu={(event) => handleContextMenu(event, coord)}
             >
@@ -409,6 +411,7 @@
 
 <style>
   .board-shell {
+    --axis-size: 24px;
     width: 100%;
     max-width: min(67vh, 660px);
     margin: 0 auto;
@@ -422,7 +425,7 @@
 
   .board-body {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr);
+    grid-template-columns: var(--axis-size) minmax(0, 1fr);
     align-items: stretch;
   }
 
@@ -447,6 +450,7 @@
     background: #ffffff;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.02), var(--shadow-sm);
     overflow: hidden;
   }
 
@@ -498,9 +502,22 @@
     z-index: 1;
   }
 
+  .cell:disabled {
+    opacity: 1;
+    cursor: default;
+  }
+
   .cell.blocked {
-    background: #111827;
-    box-shadow: inset -1px -1px 0 rgb(255 255 255 / 9%);
+    background:
+      repeating-linear-gradient(
+        -45deg,
+        rgba(255, 255, 255, 0.055),
+        rgba(255, 255, 255, 0.055) 3px,
+        transparent 3px,
+        transparent 6px
+      ),
+      #181c24;
+    box-shadow: inset -1px -1px 0 rgb(255 255 255 / 10%);
     opacity: 1;
     cursor: not-allowed;
   }
@@ -534,14 +551,16 @@
 
   .piece {
     position: relative;
-    width: 67%;
-    height: 67%;
+    width: 72%;
+    height: 72%;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 800;
-    box-shadow: 0 1px 2px rgb(17 19 24 / 12%);
+    box-shadow:
+      0 2px 5px rgb(17 19 24 / 15%),
+      inset 0 1px 1px rgb(255 255 255 / 26%);
     transition:
       transform 0.12s ease,
       opacity 0.15s ease,
@@ -550,19 +569,25 @@
   }
 
   .piece-letter {
-    font-size: clamp(10px, 52cqmin, 24px);
+    font-size: clamp(11px, 55cqmin, 24px);
     line-height: 1;
     letter-spacing: -0.02em;
   }
 
   .piece.pending {
-    outline: 1px dashed var(--text-secondary);
+    box-shadow:
+      0 0 0 2px #ffffff,
+      0 2px 6px rgb(17 19 24 / 16%);
+    outline: 1.5px dashed var(--text-secondary);
     outline-offset: 2px;
     transform: scale(1.04);
   }
 
   .piece.verify-added {
-    outline: 1px dashed var(--player-p0-ink);
+    box-shadow:
+      0 0 0 2px #ffffff,
+      0 2px 6px rgb(17 19 24 / 14%);
+    outline: 1.5px dashed var(--player-p0-ink);
     outline-offset: 2px;
   }
 
@@ -628,6 +653,25 @@
   @media (max-width: 680px), (hover: none) and (pointer: coarse) and (max-width: 960px) {
     .board-shell {
       max-width: none;
+    }
+  }
+
+  @media (max-width: 680px) {
+    .board-shell {
+      --axis-size: 18px;
+    }
+
+    .axis-label {
+      font-size: 0.64rem;
+    }
+
+    .piece {
+      width: 78%;
+      height: 78%;
+    }
+
+    .piece-letter {
+      font-size: clamp(11px, 58cqmin, 22px);
     }
   }
 </style>

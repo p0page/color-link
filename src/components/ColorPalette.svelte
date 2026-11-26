@@ -27,7 +27,8 @@
     <span class="palette-scroll-hint">左右滑动选子</span>
   </div>
 
-  <div class="palette-grid">
+  <div class="palette-scroll-shell">
+    <div class="palette-grid">
     {#each PIECE_COLORS as color (color.id)}
       {@const placed = colorCounts.get(color.id) ?? 0}
       {@const remaining = Math.max(0, 2 - placed)}
@@ -55,6 +56,7 @@
         <span class="badge">{usedThisTurn ? '本轮' : remaining}</span>
       </button>
     {/each}
+    </div>
   </div>
 </div>
 
@@ -87,6 +89,10 @@
     display: none;
   }
 
+  .palette-scroll-shell {
+    position: relative;
+  }
+
   .palette-grid {
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -114,11 +120,14 @@
   .color-chip:hover:not(:disabled) {
     border-color: var(--piece-bg);
     background: var(--bg-surface);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
   }
 
   .color-chip.selected {
     border-color: var(--piece-bg);
     background: color-mix(in srgb, var(--piece-bg) 10%, white);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--piece-bg) 22%, transparent);
   }
 
   .color-chip.singleton:not(.selected) {
@@ -147,7 +156,9 @@
     justify-content: center;
     font-weight: 800;
     font-size: 0.9rem;
-    box-shadow: 0 1px 2px rgb(17 19 24 / 10%);
+    box-shadow:
+      0 1px 3px rgb(17 19 24 / 14%),
+      inset 0 1px 1px rgb(255 255 255 / 24%);
   }
 
   .badge {
@@ -176,13 +187,24 @@
       color: var(--text-muted);
     }
 
+    .palette-scroll-shell::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 6px;
+      width: 22px;
+      pointer-events: none;
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0), var(--bg-surface));
+    }
+
     .palette-grid {
       grid-template: repeat(2, auto) / none;
       grid-auto-flow: column;
       grid-auto-columns: 44px;
       gap: 5px;
       overflow-x: auto;
-      padding: 3px 3px 7px;
+      padding: 3px 18px 7px 3px;
     }
 
     .color-chip {

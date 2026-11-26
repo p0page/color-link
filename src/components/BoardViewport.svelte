@@ -1,7 +1,12 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  let { rows, cols, children }: { rows: number; cols: number; children: Snippet } = $props();
+  let { rows, cols, interactive = true, children }: {
+    rows: number;
+    cols: number;
+    interactive?: boolean;
+    children: Snippet;
+  } = $props();
   let zoomed = $state(false);
 </script>
 
@@ -18,10 +23,19 @@
       aria-pressed={zoomed}
       onclick={() => (zoomed = !zoomed)}
     >
+      <svg class="zoom-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" />
+        <path d="M20 20l-3.8-3.8" />
+        {#if zoomed}
+          <path d="M8.5 11h5" />
+        {:else}
+          <path d="M11 8.5v5M8.5 11h5" />
+        {/if}
+      </svg>
       {zoomed ? '适应屏幕' : '放大棋盘'}
     </button>
     {#if zoomed}
-      <span>滑动查看棋盘，轻点操作</span>
+      <span>{interactive ? '滑动查看棋盘，轻点操作' : '滑动查看棋盘'}</span>
     {/if}
   </div>
   <div class="board-scroll">
@@ -56,6 +70,16 @@
       flex-shrink: 0;
       padding: 5px 12px;
       font-size: 0.78rem;
+    }
+
+    .zoom-icon {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     .board-content {

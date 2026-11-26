@@ -78,12 +78,12 @@
       <p class="reason">{reasonText}</p>
 
       <div class="score-board tabular">
-        <div class="score-side" class:lead={result.winner === 0}>
+        <div class="score-side p0-side" class:lead={result.winner === 0}>
           <span class="name p0">{playerNames[0]}</span>
           <span class="num p0-box">{scores[0]}</span>
         </div>
         <div class="vs">:</div>
-        <div class="score-side" class:lead={result.winner === 1}>
+        <div class="score-side p1-side" class:lead={result.winner === 1}>
           <span class="name p1">{playerNames[1]}</span>
           <span class="num p1-box">{scores[1]}</span>
         </div>
@@ -192,7 +192,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     min-width: 0;
   }
 
@@ -222,6 +222,16 @@
   .score-side .num.p1-box {
     color: var(--player-p1-ink);
     background: var(--player-p1-tint);
+  }
+
+  .score-side.lead .num.p0-box {
+    border-color: color-mix(in srgb, var(--accent-p0) 35%, transparent);
+    box-shadow: 0 3px 10px color-mix(in srgb, var(--accent-p0) 16%, transparent);
+  }
+
+  .score-side.lead .num.p1-box {
+    border-color: color-mix(in srgb, var(--accent-p1) 35%, transparent);
+    box-shadow: 0 3px 10px color-mix(in srgb, var(--accent-p1) 16%, transparent);
   }
 
   .vs {

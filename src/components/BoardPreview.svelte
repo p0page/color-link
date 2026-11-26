@@ -59,6 +59,7 @@
     border-radius: 10px;
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-sm);
   }
 
   .preview-grid {
@@ -77,7 +78,7 @@
   }
 
   .p-cell.blocked {
-    background: #111827;
+    background: #181c24;
   }
 
   .p-dot {

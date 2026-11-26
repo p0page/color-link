@@ -25,13 +25,6 @@
         <div class="score-side p0">
           <span class="score-name">{playerNames[0]}</span>
           <span class="score-value">{scores[0]}</span>
-          {#if targetWins <= 10}
-            <span class="score-pips">
-              {#each Array(targetWins) as _, idx}
-                <span class="pip" class:filled={idx < scores[0]}></span>
-              {/each}
-            </span>
-          {/if}
         </div>
 
         <span class="score-sep">:</span>
@@ -39,26 +32,19 @@
         <div class="score-side p1">
           <span class="score-name">{playerNames[1]}</span>
           <span class="score-value">{scores[1]}</span>
-          {#if targetWins <= 10}
-            <span class="score-pips">
-              {#each Array(targetWins) as _, idx}
-                <span class="pip" class:filled={idx < scores[1]}></span>
-              {/each}
-            </span>
-          {/if}
         </div>
       </div>
     </div>
 
     <div class="choice-grid">
       <button type="button" class="choice-btn p0-choice" onclick={() => onSelect(0)}>
-        <span class="choice-badge">PLAYER 1</span>
+        <span class="choice-badge"><span class="badge-dot"></span>PLAYER 1</span>
         <span class="choice-name">{playerNames[0]}</span>
         <span class="choice-sub">作为本局先手开始</span>
       </button>
 
       <button type="button" class="choice-btn p1-choice" onclick={() => onSelect(1)}>
-        <span class="choice-badge">PLAYER 2</span>
+        <span class="choice-badge"><span class="badge-dot"></span>PLAYER 2</span>
         <span class="choice-name">{playerNames[1]}</span>
         <span class="choice-sub">作为本局先手开始</span>
       </button>
@@ -183,28 +169,6 @@
     background: var(--player-p1-tint);
   }
 
-  .score-pips {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 4px;
-  }
-
-  .pip {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #cbd5e1;
-  }
-
-  .score-side.p0 .pip.filled {
-    background: var(--accent-p0);
-  }
-
-  .score-side.p1 .pip.filled {
-    background: var(--accent-p1);
-  }
-
   .score-sep {
     font-size: 1.65rem;
     font-weight: 900;
@@ -250,10 +214,27 @@
   }
 
   .choice-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.12em;
     color: var(--text-muted);
+  }
+
+  .badge-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+
+  .p0-choice .badge-dot {
+    background: var(--accent-p0);
+  }
+
+  .p1-choice .badge-dot {
+    background: var(--accent-p1);
   }
 
   .p0-choice .choice-name {

@@ -109,6 +109,9 @@
       <div class="header-top-row">
         <BrandTitle size="lg" />
         <button type="button" class="btn btn-ghost history-entry-btn" onclick={onOpenHistory}>
+          <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4M12 7v5l3 2" />
+          </svg>
           历史对决
           <span class="count-badge tabular">{historyCount}</span>
         </button>
@@ -208,7 +211,11 @@
           <label class="sub-field">
             <span class="field-label">获胜所需局数</span>
             <input type="number" min="1" max="20" bind:value={targetWins} />
-            <span class="meta-hint">先达到该分数者获胜</span>
+            <div class="preset-row compact">
+              <button type="button" class="chip mini" class:active={targetWins === 1} onclick={() => (targetWins = 1)}>单局</button>
+              <button type="button" class="chip mini" class:active={targetWins === 2} onclick={() => (targetWins = 2)}>三局两胜</button>
+              <button type="button" class="chip mini" class:active={targetWins === 3} onclick={() => (targetWins = 3)}>五局三胜</button>
+            </div>
           </label>
         </div>
         <div class="player-settings" role="group" aria-labelledby="player-settings-title">
@@ -216,11 +223,11 @@
           <div class="paired-fields">
             <label class="sub-field">
               <span class="player-label"><span class="player-dot orange"></span>橙方名称</span>
-              <input type="text" maxlength="16" placeholder="玩家 1" bind:value={player1Name} />
+              <input class="player-input p0" type="text" maxlength="16" placeholder="玩家 1" bind:value={player1Name} />
             </label>
             <label class="sub-field">
               <span class="player-label"><span class="player-dot blue"></span>蓝方名称</span>
-              <input type="text" maxlength="16" placeholder="玩家 2" bind:value={player2Name} />
+              <input class="player-input p1" type="text" maxlength="16" placeholder="玩家 2" bind:value={player2Name} />
             </label>
           </div>
         </div>
@@ -323,6 +330,17 @@
     white-space: nowrap;
   }
 
+  .btn-icon {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
   .count-badge {
     min-width: 22px;
     height: 22px;
@@ -416,6 +434,19 @@
 
   input:focus {
     background: var(--bg-surface);
+    border-color: var(--border-strong);
+  }
+
+  .player-input.p0:focus {
+    border-color: color-mix(in srgb, var(--accent-p0) 60%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-p0) 14%, transparent);
+    outline: none;
+  }
+
+  .player-input.p1:focus {
+    border-color: color-mix(in srgb, var(--accent-p1) 60%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-p1) 14%, transparent);
+    outline: none;
   }
 
   input:disabled {
@@ -474,6 +505,11 @@
     flex-wrap: wrap;
   }
 
+  .preset-row.compact {
+    gap: 5px;
+    margin-top: 2px;
+  }
+
   .chip {
     padding: 6px 12px;
     border-radius: var(--radius-pill);
@@ -482,6 +518,12 @@
     background: var(--bg-elevated);
     overflow-wrap: anywhere;
     color: var(--text-secondary);
+    transition: background-color 0.14s ease, color 0.14s ease;
+  }
+
+  .chip.mini {
+    padding: 4px 9px;
+    font-size: 0.74rem;
   }
 
   .chip:hover {
@@ -572,6 +614,7 @@
     padding: 14px;
     border-radius: var(--radius-md);
     background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
   }
 
   .board-summary {

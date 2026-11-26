@@ -1,8 +1,9 @@
 <script lang="ts">
   import { getPieceColor } from '../lib/colors';
-  import type { VerificationEvaluation } from '../lib/types';
+  import type { PlayerId, VerificationEvaluation } from '../lib/types';
 
   interface Props {
+    verifier: PlayerId;
     verifierName: string;
     declarerName: string;
     minPathLength: number;
@@ -18,9 +19,12 @@
     onResetVerifyPieces: () => void;
     onHoverColor: (colorId: number | null) => void;
     onResign: () => void;
+    solving: boolean;
+    onAutoSolve: () => void;
   }
 
   let {
+    verifier,
     verifierName,
     declarerName,
     minPathLength,
@@ -36,16 +40,26 @@
     onResetVerifyPieces,
     onHoverColor,
     onResign,
+    solving,
+    onAutoSolve,
   }: Props = $props();
 
   let confirmResign = $state(false);
 
   const singletons = $derived(evaluation.colors.filter((item) => item.needsPair));
+  const progressPct = $derived(
+    evaluation.totalColors > 0
+      ? Math.round((evaluation.validColors / evaluation.totalColors) * 100)
+      : 0,
+  );
 </script>
 
 <div class="verify-panel">
-  <div class="verify-banner">
-    <div class="banner-title">连线验证模式</div>
+  <div class="verify-banner" class:p0={verifier === 0} class:p1={verifier === 1}>
+    <div class="banner-title">
+      <span class="banner-dot" aria-hidden="true"></span>
+      连线验证模式
+    </div>
     <p class="banner-desc">
       <strong>{declarerName}</strong> 认定不可能，现由上一手落子方
       <strong>{verifierName}</strong> 证明所有已出现颜色可合法连通（每条路径 ≥ <strong>{minPathLength}</strong> 格，满足后自动通过）。
@@ -113,6 +127,9 @@
         {evaluation.validColors} / {evaluation.totalColors} 已合法
       </span>
     </div>
+    <div class="progress-bar" aria-hidden="true">
+      <div class="progress-fill" class:done={evaluation.allValid} style="width: {progressPct}%;"></div>
+    </div>
 
     <div class="checklist">
       {#each evaluation.colors as item (item.colorId)}
@@ -173,6 +190,16 @@
   </div>
 
   <div class="verify-actions">
+    <button type="button" class="btn btn-ghost auto-solve" disabled={solving} onclick={onAutoSolve}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" class:spin={solving}>
+        {#if solving}
+          <path d="M12 3a9 9 0 1 0 9 9" />
+        {:else}
+          <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7z" />
+        {/if}
+      </svg>
+      {solving ? '正在求解…' : '自动求解'}
+    </button>
     <div class="utility-row">
       <button type="button" class="btn btn-ghost" disabled={!hasAnyPath} onclick={onClearAllPaths}>
         清空全部连线
@@ -211,15 +238,35 @@
   }
 
   .verify-banner {
-    padding: 14px;
+    --v-color: var(--accent-p0);
+    --v-tint: var(--player-p0-tint);
+    padding: 13px 14px;
     border-radius: var(--radius-md);
-    background: var(--bg-elevated);
+    background: var(--v-tint);
+    border: 1px solid color-mix(in srgb, var(--v-color) 20%, transparent);
+  }
+
+  .verify-banner.p1 {
+    --v-color: var(--accent-p1);
+    --v-tint: var(--player-p1-tint);
   }
 
   .banner-title {
-    font-size: 0.95rem;
-    font-weight: 700;
-    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.92rem;
+    font-weight: 750;
+    margin-bottom: 5px;
+    color: var(--text-primary);
+  }
+
+  .banner-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--v-color);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--v-color) 20%, transparent);
   }
 
   .banner-desc {
@@ -335,6 +382,24 @@
     justify-content: space-between;
   }
 
+  .progress-bar {
+    height: 6px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--bg-subtle);
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent-p1);
+    transition: width 0.22s ease, background-color 0.22s ease;
+  }
+
+  .progress-fill.done {
+    background: var(--accent-success);
+  }
+
   .progress-pill {
     font-size: 0.76rem;
     font-weight: 700;
@@ -367,6 +432,15 @@
     border-radius: var(--radius-sm);
     background: #ffffff;
     border: 1px solid var(--border-subtle);
+    transition:
+      border-color 0.14s ease,
+      background-color 0.14s ease,
+      box-shadow 0.14s ease;
+  }
+
+  .check-row:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-sm);
   }
 
   .check-row.valid {
@@ -454,8 +528,44 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding-top: 4px;
+    padding-top: 10px;
     border-top: 1px solid var(--border-subtle);
+  }
+
+  .auto-solve {
+    width: 100%;
+    padding: 9px 14px;
+    font-size: 0.84rem;
+    background: var(--bg-elevated);
+    border-color: var(--border-subtle);
+    color: var(--text-primary);
+    box-shadow: none;
+  }
+
+  .auto-solve:hover:not(:disabled) {
+    background: var(--bg-surface);
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-card);
+  }
+
+  .auto-solve svg {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .auto-solve svg.spin {
+    animation: verify-spin 0.85s linear infinite;
+  }
+
+  @keyframes verify-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .utility-row {
