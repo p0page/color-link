@@ -38,3 +38,13 @@ pnpm preview
 ```
 
 推送到 `main` 后，GitHub Actions 会检查、构建，并把 `dist/` 部署到 GitHub Pages。
+
+## 流量统计
+
+项目使用免费的 Cloudflare Web Analytics 统计页面浏览量、访问次数和来源，无需自建后端。
+
+1. 在 [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/get-started/#sites-not-proxied-through-cloudflare) 添加站点，主机名填 `p0page.github.io`。
+2. 从 Cloudflare 提供的安装代码里复制 `data-cf-beacon` 中的 `token`，将它设为 [GitHub Actions 仓库变量](https://github.com/p0page/color-link/settings/variables/actions) `CLOUDFLARE_WEB_ANALYTICS_TOKEN`。这个站点 token 会随网页公开。
+3. 运行 [Deploy Color Link](https://github.com/p0page/color-link/actions/workflows/pages.yml) 重新部署。打开在线试玩页面后，可在 Cloudflare 的 Web Analytics 面板查看数据，共用主机名的项目可以按 `/color-link/` 路径筛选。
+
+变量留空时，构建产物不包含统计脚本。本地开发服务器也不会加载统计脚本。
