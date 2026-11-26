@@ -1,6 +1,7 @@
 <script lang="ts">
   import { MediaQuery } from 'svelte/reactivity';
   import type { Snippet } from 'svelte';
+  import Modal from './Modal.svelte';
 
   let { id, title, onClose, children }: {
     id: string;
@@ -11,24 +12,15 @@
 
   const narrow = new MediaQuery('(max-width: 640px)');
   const titleId = $props.id();
-  let modal = $state<HTMLDialogElement>();
   let heading = $state<HTMLHeadingElement>();
-  let pressedBackdrop = false;
-
-  function isBackdrop(event: MouseEvent) {
-    if (!modal || event.target !== modal) return false;
-    const { top } = modal.getBoundingClientRect();
-    return event.clientY < top;
-  }
 
   $effect(() => {
-    modal?.showModal();
     heading?.focus();
   });
 </script>
 
 {#snippet header()}
-  <header>
+  <header class:sheet-header={narrow.current}>
     <h3 id={titleId} tabindex="-1" bind:this={heading}>{title}</h3>
     <button type="button" class="close" aria-label="收起地图库" onclick={onClose}>
       <span aria-hidden="true">×</span>
@@ -37,15 +29,12 @@
 {/snippet}
 
 {#if narrow.current}
-  <dialog class="picker-sheet" {id} bind:this={modal} aria-labelledby={titleId}
-    onpointerdown={(event) => (pressedBackdrop = isBackdrop(event))}
-    onclick={(event) => { if (pressedBackdrop && isBackdrop(event)) onClose(); }}
-    oncancel={(event) => { event.preventDefault(); onClose(); }}>
+  <Modal layout="sheet" {id} labelledBy={titleId} dismissOnBackdrop onDismiss={onClose}>
     {@render header()}
     <div class="sheet-content">
       {@render children()}
     </div>
-  </dialog>
+  </Modal>
 {:else}
   <section class="picker-panel" {id} aria-labelledby={titleId}>
     {@render header()}
@@ -90,33 +79,7 @@
     font-size: 1.25rem;
   }
 
-  .picker-sheet {
-    position: fixed;
-    inset: auto 0 0;
-    width: 100%;
-    max-width: none;
-    max-height: 78dvh;
-    margin: 0;
-    padding: 0;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    background: var(--bg-surface);
-    color: var(--text-primary);
-    box-shadow: var(--shadow-lg);
-    overflow: hidden;
-    text-align: start;
-  }
-
-  .picker-sheet[open] {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .picker-sheet::backdrop {
-    background: var(--modal-overlay);
-  }
-
-  .picker-sheet header {
+  .sheet-header {
     flex-shrink: 0;
     padding: 10px 14px;
     border-bottom: 1px solid var(--border-subtle);

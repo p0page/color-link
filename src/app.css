@@ -1,4 +1,5 @@
 :root {
+  -webkit-tap-highlight-color: transparent;
   --bg-base: #f4f5f7;
   --bg-surface: #ffffff;
   --bg-elevated: #f6f7f9;
@@ -49,6 +50,24 @@ body {
     'Microsoft YaHei', 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+html.modal-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html.modal-open body {
+  position: fixed;
+  top: var(--modal-scroll-y);
+  left: var(--modal-scroll-x);
+  width: 100%;
+  overflow: hidden;
+}
+
+@keyframes layer-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 button,

@@ -12,7 +12,7 @@ function defineCreativePreset(id: string, name: string, supportedMinPathLength: 
 }
 
 export const CREATIVE_PRESETS = [
-  defineCreativePreset('quadrants', '四象限迷城', 9, [
+  defineCreativePreset('quadrants', '十字迷城', 9, [
     '....#....',
     '.........',
     '....#....',

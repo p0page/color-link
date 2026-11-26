@@ -4,6 +4,7 @@
   import BoardInfo from './BoardInfo.svelte';
   import BoardPreview from './BoardPreview.svelte';
   import BoardPreviewDialog from './BoardPreviewDialog.svelte';
+  import Modal from './Modal.svelte';
 
   interface Props {
     roundNumber: number;
@@ -20,12 +21,13 @@
     onSelect, onBackToSetup,
   }: Props = $props();
   let previewBoard = $state.raw<MatchBoard | undefined>();
+  const titleId = $props.id();
 </script>
 
-<div class="modal-backdrop">
+<Modal labelledBy={titleId}>
   <div class="modal-card">
     <div class="round-tag">第 {roundNumber} 局 · 先得 {targetWins} 分获胜</div>
-    <h2>请选择本局先手玩家</h2>
+    <h2 id={titleId}>请选择本局先手玩家</h2>
     <p class="desc">先手首回合放置 <strong>1 枚</strong> 棋子，之后双方轮流每回合放置 <strong>2 枚不同颜色</strong> 的棋子。</p>
 
     {#if currentRoundBoard}
@@ -58,17 +60,14 @@
     </div>
 
     <div class="choice-grid">
-      <button type="button" class="choice-btn p0-choice" onclick={() => onSelect(0)}>
-        <span class="choice-badge"><span class="badge-dot"></span>PLAYER 1</span>
-        <span class="choice-name">{playerNames[0]}</span>
-        <span class="choice-sub">作为本局先手开始</span>
-      </button>
-
-      <button type="button" class="choice-btn p1-choice" onclick={() => onSelect(1)}>
-        <span class="choice-badge"><span class="badge-dot"></span>PLAYER 2</span>
-        <span class="choice-name">{playerNames[1]}</span>
-        <span class="choice-sub">作为本局先手开始</span>
-      </button>
+      {#each [0, 1] as const as player (player)}
+        <button type="button" class="choice-btn" class:p1-choice={player === 1} onclick={() => onSelect(player)}>
+          <span class="choice-name">
+            {playerNames[player]}{#if playerNames[0] === playerNames[1]}（{player + 1} 号）{/if}
+          </span>
+          <span class="choice-action">选为先手</span>
+        </button>
+      {/each}
     </div>
 
     {#if roundNumber === 1}
@@ -77,25 +76,13 @@
       </div>
     {/if}
   </div>
-</div>
+</Modal>
 
 {#if previewBoard}
   <BoardPreviewDialog board={previewBoard} onClose={() => (previewBoard = undefined)} />
 {/if}
 
 <style>
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 40;
-    background: var(--modal-overlay);
-    backdrop-filter: blur(4px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-  }
-
   .modal-card {
     width: 100%;
     max-width: 520px;
@@ -240,75 +227,42 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
-    padding: 18px 14px;
-    border-radius: var(--radius-md);
-    background: var(--bg-elevated);
-    border: 1.5px solid var(--border-subtle);
-    transition:
-      transform 0.14s ease,
-      border-color 0.15s ease,
-      box-shadow 0.15s ease,
-      background-color 0.15s ease;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+    min-height: 68px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--player-p0-ink);
+    color: #fff;
+    transition: filter 0.15s ease;
   }
 
-  .choice-btn:hover {
-    transform: translateY(-2px);
-    background: #ffffff;
+  .p1-choice {
+    background: var(--player-p1-ink);
   }
 
-  .p0-choice:hover {
-    border-color: var(--accent-p0);
-    box-shadow: 0 8px 20px rgba(217, 119, 6, 0.14);
+  @media (hover: hover) {
+    .choice-btn:hover {
+      filter: brightness(0.9);
+    }
   }
 
-  .p1-choice:hover {
-    border-color: var(--accent-p1);
-    box-shadow: 0 8px 20px rgba(2, 132, 199, 0.14);
-  }
-
-  .choice-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    color: var(--text-muted);
-  }
-
-  .badge-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-  }
-
-  .p0-choice .badge-dot {
-    background: var(--accent-p0);
-  }
-
-  .p1-choice .badge-dot {
-    background: var(--accent-p1);
-  }
-
-  .p0-choice .choice-name {
-    color: var(--player-p0-ink);
-  }
-
-  .p1-choice .choice-name {
-    color: var(--player-p1-ink);
+  .choice-btn:active {
+    filter: brightness(0.8);
   }
 
   .choice-name {
-    font-size: 1.15rem;
+    font-size: 1.05rem;
     font-weight: 800;
+    line-height: 1.25;
     overflow-wrap: anywhere;
     max-width: 100%;
   }
 
-  .choice-sub {
+  .choice-action {
     font-size: 0.78rem;
-    color: var(--text-secondary);
+    line-height: 1.3;
   }
 
   .footer-actions {

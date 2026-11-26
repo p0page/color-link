@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Modal from './Modal.svelte';
   import type { RoundResult } from '../lib/types';
 
   interface Props {
@@ -26,6 +27,8 @@
   }: Props = $props();
 
   let inspectingBoard = $state(false);
+  let peekHeight = $state(0);
+  const titleId = $props.id();
 
   const winnerName = $derived(playerNames[result.winner]);
 
@@ -46,33 +49,35 @@
 </script>
 
 {#if inspectingBoard}
-  <div class="peek-bar">
-    <div class="peek-info">
-      <span class="peek-badge">{isMatchOver ? '最终胜出' : `第 ${result.roundNumber} 局胜出`}</span>
-      <strong>{winnerName}</strong>
-    <span class="peek-score tabular">
-      <strong class="p0">{scores[0]}</strong>
-      <span class="peek-sep">:</span>
-      <strong class="p1">{scores[1]}</strong>
-    </span>
-    </div>
-    <div class="peek-actions">
-      <button type="button" class="btn btn-ghost" onclick={() => (inspectingBoard = false)}>展开结算</button>
-      {#if isMatchOver}
-        <button type="button" class="btn btn-primary" onclick={onRematch}>再来一赛</button>
-      {:else}
-        <button type="button" class="btn btn-primary" onclick={onNextRound}>下一局</button>
-      {/if}
+  <div class="peek-space" style:--peek-height="{peekHeight}px">
+    <div class="peek-bar" bind:offsetHeight={peekHeight}>
+      <div class="peek-info">
+        <span class="peek-badge">{isMatchOver ? '最终胜出' : `第 ${result.roundNumber} 局胜出`}</span>
+        <strong>{winnerName}</strong>
+        <span class="peek-score tabular">
+          <strong class="p0">{scores[0]}</strong>
+          <span class="peek-sep">:</span>
+          <strong class="p1">{scores[1]}</strong>
+        </span>
+      </div>
+      <div class="peek-actions">
+        <button type="button" class="btn btn-ghost" onclick={() => (inspectingBoard = false)}>展开结算</button>
+        {#if isMatchOver}
+          <button type="button" class="btn btn-primary" onclick={onRematch}>再来一赛</button>
+        {:else}
+          <button type="button" class="btn btn-primary" onclick={onNextRound}>下一局</button>
+        {/if}
+      </div>
     </div>
   </div>
 {:else}
-  <div class="modal-backdrop">
+  <Modal labelledBy={titleId}>
     <div class="modal-card" class:champion={isMatchOver}>
       <div class="result-badge" class:gold={isMatchOver}>
         {isMatchOver ? `🏆 比赛结束 · 率先达成 ${targetWins} 胜` : `第 ${result.roundNumber} 局结束`}
       </div>
 
-      <h2>
+      <h2 id={titleId}>
         <span class:p0={result.winner === 0} class:p1={result.winner === 1}>{winnerName}</span>
         {isMatchOver ? ' 赢得最终胜利！' : ' 获得 1 分'}
       </h2>
@@ -104,22 +109,10 @@
         </button>
       </div>
     </div>
-  </div>
+  </Modal>
 {/if}
 
 <style>
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 45;
-    background: var(--modal-overlay);
-    backdrop-filter: blur(4px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-  }
-
   .modal-card {
     width: 100%;
     max-width: 480px;
@@ -256,9 +249,14 @@
     overflow-wrap: anywhere;
   }
 
+  .peek-space {
+    --peek-bottom: max(18px, env(safe-area-inset-bottom));
+    block-size: calc(var(--peek-height) + var(--peek-bottom));
+  }
+
   .peek-bar {
     position: fixed;
-    bottom: max(18px, env(safe-area-inset-bottom));
+    bottom: var(--peek-bottom);
     left: 50%;
     transform: translateX(-50%);
     z-index: 45;
@@ -270,7 +268,7 @@
     max-width: calc(100% - 24px);
     gap: 10px 18px;
     padding: 10px 16px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: rgba(255, 255, 255, 0.96);
     border: 1px solid var(--border-strong);
     box-shadow: var(--shadow-lg);
@@ -280,8 +278,16 @@
   .peek-info {
     display: flex;
     align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    min-width: 0;
     gap: 8px;
     font-size: 0.9rem;
+  }
+
+  .peek-info > strong {
+    overflow-wrap: anywhere;
+    min-width: 0;
   }
 
   .peek-badge {
@@ -311,6 +317,18 @@
 
   .peek-actions {
     display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
     gap: 8px;
+  }
+
+  .peek-actions .btn {
+    min-height: 44px;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .peek-bar {
+      animation: layer-fade-in 180ms ease-out;
+    }
   }
 </style>

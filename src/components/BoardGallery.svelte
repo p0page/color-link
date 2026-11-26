@@ -69,7 +69,6 @@
     padding: 4px;
     border-radius: 6px;
     text-align: start;
-    -webkit-tap-highlight-color: transparent;
   }
 
   @media (hover: hover) {

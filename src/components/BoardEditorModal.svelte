@@ -7,6 +7,7 @@
   import type { BoardBlueprint, CellKey, MatchBoard, SavedBoard } from '../lib/types';
   import BoardPreview from './BoardPreview.svelte';
   import BoardViewport from './BoardViewport.svelte';
+  import Modal from './Modal.svelte';
 
   interface Props {
     initialBlueprint: BoardBlueprint;
@@ -76,11 +77,9 @@
   let paintedOnPointerDown = false;
   let notice = $state<string | null>(null);
   let noticeTimer: ReturnType<typeof setTimeout> | null = null;
-  let dialog: HTMLDialogElement;
   let nameInput: HTMLInputElement;
 
   onMount(() => {
-    dialog.showModal();
     return () => {
       if (noticeTimer) clearTimeout(noticeTimer);
     };
@@ -349,8 +348,7 @@
 
 <svelte:window onpointerup={stopPainting} onpointercancel={stopPainting} onblur={stopPainting} />
 
-<dialog class="modal-backdrop" bind:this={dialog} aria-label="棋盘编辑器"
-  oncancel={(event) => { event.preventDefault(); onClose(); }}>
+<Modal label="棋盘编辑器" fullscreenOnMobile onDismiss={onClose}>
   <div class="editor-shell">
     <header class="editor-header">
       <h2>第 {roundNumber} 局 · 自定义地图</h2>
@@ -591,36 +589,9 @@
       </aside>
     </div>
   </div>
-</dialog>
+</Modal>
 
 <style>
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    width: 100%;
-    height: 100%;
-    max-width: none;
-    max-height: none;
-    margin: 0;
-    border: 0;
-    color: var(--text-primary);
-    background: transparent;
-    overflow: hidden;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-  }
-
-  .modal-backdrop[open] {
-    display: flex;
-  }
-
-  .modal-backdrop::backdrop {
-    background: var(--modal-overlay);
-    backdrop-filter: blur(4px);
-  }
-
   .editor-shell {
     width: 100%;
     max-width: 1120px;
@@ -1154,10 +1125,6 @@
   }
 
   @media (max-width: 680px) {
-    .modal-backdrop {
-      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-    }
-
     .editor-shell {
       height: 100%;
       max-height: 100%;

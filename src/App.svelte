@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
+  import { isModalOpen } from './lib/modal';
   import BoardCanvas from './components/BoardCanvas.svelte';
   import BrandTitle from './components/BrandTitle.svelte';
   import ColorPalette from './components/ColorPalette.svelte';
   import FirstPlayerModal from './components/FirstPlayerModal.svelte';
   import MatchHistoryModal from './components/MatchHistoryModal.svelte';
+  import Modal from './components/Modal.svelte';
   import RoundResultModal from './components/RoundResultModal.svelte';
   import SetupView from './components/SetupView.svelte';
   import VerifyPanel from './components/VerifyPanel.svelte';
@@ -83,6 +85,15 @@
   let game = $state<GameState>({
     ...createMatchState(DEFAULT_CONFIG),
     phase: 'setup',
+  });
+  let exitConfirmationPhase = $state<GameState['phase'] | null>(null);
+  const exitTitleId = $props.id();
+  const exitDescriptionId = `${exitTitleId}-description`;
+
+  $effect(() => {
+    if (exitConfirmationPhase !== null && exitConfirmationPhase !== game.phase) {
+      exitConfirmationPhase = null;
+    }
   });
 
   let selectedColorId = $state<number | null>(null);
@@ -619,7 +630,8 @@
     resetTransientUi();
   }
 
-  function handleBackToSetup() {
+  function returnToSetup() {
+    exitConfirmationPhase = null;
     game = {
       ...createMatchState(savedConfig),
       phase: 'setup',
@@ -627,12 +639,17 @@
     resetTransientUi();
   }
 
+  function handleBackToSetup() {
+    if (game.phase === 'match_over' || (game.phase === 'select_first' && game.roundNumber === 1)) {
+      returnToSetup();
+    } else {
+      exitConfirmationPhase = game.phase;
+    }
+  }
+
   function handleKeydown(event: KeyboardEvent) {
+    if (event.defaultPrevented || isModalOpen()) return;
     if (event.key === 'Escape') {
-      if (showHistory) {
-        showHistory = false;
-        return;
-      }
       if (game.phase === 'playing') {
         selectedColorId = null;
       } else if (game.phase === 'verifying') {
@@ -673,7 +690,13 @@
             <span class="count-badge tabular">{matchHistory.length}</span>
           {/if}
         </button>
-        <button type="button" class="btn btn-ghost small icon-btn" aria-label="配置 / 新赛" onclick={handleBackToSetup}>
+        <button
+          type="button"
+          class="btn btn-ghost small icon-btn"
+          aria-label="配置 / 新赛"
+          onclick={handleBackToSetup}
+          onkeydown={(event) => { if (event.key === 'Enter') event.stopPropagation(); }}
+        >
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
           <span class="btn-label">配置 / 新赛</span>
         </button>
@@ -799,7 +822,19 @@
         {/if}
       </section>
 
-      {#if !isShowingResult}
+      {#if isShowingResult && game.lastRoundResult}
+        <RoundResultModal
+          result={game.lastRoundResult}
+          isMatchOver={game.phase === 'match_over'}
+          playerNames={game.config.playerNames}
+          scores={game.scores}
+          targetWins={game.config.targetWins}
+          nextBoardName={nextRoundBoard && boardOptionLabel(nextRoundBoard)}
+          onNextRound={handleNextRound}
+          onRematch={handleRematch}
+          onBackToSetup={handleBackToSetup}
+        />
+      {:else if !isShowingResult}
         <aside class="side-panel">
           {#if game.phase === 'verifying' && game.verifier !== null && game.declarer !== null}
             <VerifyPanel
@@ -926,18 +961,19 @@
     />
   {/if}
 
-  {#if (game.phase === 'round_over' || game.phase === 'match_over') && game.lastRoundResult}
-    <RoundResultModal
-      result={game.lastRoundResult}
-      isMatchOver={game.phase === 'match_over'}
-      playerNames={game.config.playerNames}
-      scores={game.scores}
-      targetWins={game.config.targetWins}
-      nextBoardName={nextRoundBoard && boardOptionLabel(nextRoundBoard)}
-      onNextRound={handleNextRound}
-      onRematch={handleRematch}
-      onBackToSetup={handleBackToSetup}
-    />
+  {#if exitConfirmationPhase === game.phase}
+    <Modal labelledBy={exitTitleId} describedBy={exitDescriptionId} onDismiss={() => (exitConfirmationPhase = null)}>
+      <div class="exit-confirmation">
+        <h2 id={exitTitleId}>返回开赛设置？</h2>
+        <p id={exitDescriptionId}>
+          返回后，本场比分和棋盘进度将清除。{#if activeTimerLimit !== null}确认期间计时继续。{/if}
+        </p>
+        <div class="exit-actions">
+          <button type="button" class="btn btn-ghost" onclick={() => (exitConfirmationPhase = null)}>继续比赛</button>
+          <button type="button" class="btn btn-outline-danger" onclick={returnToSetup}>结束比赛并返回</button>
+        </div>
+      </div>
+    </Modal>
   {/if}
 {/if}
 
@@ -951,6 +987,41 @@
 {/if}
 
 <style>
+  .exit-confirmation {
+    width: 100%;
+    max-width: 420px;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    padding: clamp(16px, 5vw, 24px);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    background: var(--bg-surface);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .exit-confirmation h2 {
+    margin: 0;
+    font-size: 1.25rem;
+  }
+
+  .exit-confirmation p {
+    margin: 8px 0 20px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .exit-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .exit-actions .btn {
+    min-height: 44px;
+  }
+
   .game-layout {
     min-height: 100vh;
     display: flex;

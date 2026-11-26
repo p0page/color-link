@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Modal from './Modal.svelte';
   import type { MatchHistoryRecord, RoundEndReason } from '../lib/types';
 
   interface Props {
@@ -47,12 +48,7 @@
   }
 </script>
 
-<div
-  class="modal-backdrop"
-  role="dialog"
-  aria-modal="true"
-  aria-label="历史对决记录"
->
+<Modal label="历史对决记录" onDismiss={onClose}>
   <div class="modal-card">
     <header class="modal-header">
       <div>
@@ -190,21 +186,9 @@
       {/if}
     </div>
   </div>
-</div>
+</Modal>
 
 <style>
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    background: var(--modal-overlay);
-    backdrop-filter: blur(4px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-  }
-
   .modal-card {
     width: 100%;
     max-width: 720px;
